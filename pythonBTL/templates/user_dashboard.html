@@ -1,0 +1,95 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container" style="padding: 2rem 0;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+        <h1 class="section-title">Chào, {{ current_user.name }}!</h1>
+        <div style="text-align: right;">
+            <p style="font-weight: 600; color: var(--primary);">Khách hàng Thân thiết</p>
+            <p style="font-size: 0.875rem; color: var(--text-light);">{{ current_user.email }}</p>
+        </div>
+    </div>
+
+    <div class="grid" style="grid-template-columns: 2fr 1fr;">
+        <!-- Phần Đặt chỗ và Phiên sạc -->
+        <div>
+            <div class="card" style="margin-bottom: 1.5rem;">
+                <h3 style="margin-bottom: 1.5rem;"><i class="fas fa-history"></i> Lịch sử Đặt chỗ & Sạc</h3>
+                {% if bookings %}
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="text-align: left; border-bottom: 2px solid var(--border);">
+                            <th style="padding: 1rem 0;">Mã</th>
+                            <th style="padding: 1rem 0;">Vị trí</th>
+                            <th style="padding: 1rem 0;">Thời gian</th>
+                            <th style="padding: 1rem 0;">Trạng thái</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for b in bookings %}
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding: 1rem 0;">#{{ b.booking_id }}</td>
+                            <td style="padding: 1rem 0;">{{ b.slot.slot_number }} ({{ b.slot.parking.name }})</td>
+                            <td style="padding: 1rem 0; font-size: 0.875rem;">
+                                {{ b.start_time.strftime('%H:%M %d/%m') }} - {{ b.end_time.strftime('%H:%M') }}
+                            </td>
+                            <td style="padding: 1rem 0;">
+                                <span class="badge {% if b.status == 'completed' %}badge-success{% else %}badge-info{% endif %}">
+                                    {{ b.status }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p style="text-align: center; color: var(--text-light); padding: 2rem;">Bạn chưa có giao dịch nào.</p>
+                {% endif %}
+            </div>
+
+            <div class="card">
+                <h3 style="margin-bottom: 1.5rem;"><i class="fas fa-bolt"></i> Trạm Sạc Đang Hoạt Động</h3>
+                <div id="active-session" style="text-align: center; padding: 1.5rem;">
+                    <p style="color: var(--text-light);">Hiện không có phiên sạc nào đang chạy.</p>
+                    <button class="btn btn-primary" style="margin-top: 1rem;" onclick="mockStartCharging()">
+                        Thử sạc xe mẫu
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar: Thống kê nhanh và hỗ trợ -->
+        <div>
+            <div class="card" style="margin-bottom: 1.5rem; background: var(--primary); color: white;">
+                <h4>Ví Park&Charge</h4>
+                <p style="font-size: 2rem; font-weight: 800; margin: 0.5rem 0;">500,000đ</p>
+                <button class="btn btn-outline" style="color: white; border-color: white; width: 100%;">Nạp tiền</button>
+            </div>
+            <div class="card">
+                <h4>Hỗ trợ 24/7</h4>
+                <p style="font-size: 0.875rem; color: var(--text-light); margin: 0.5rem 0 1rem;">Gặp sự cố tại trạm sạc?</p>
+                <button class="btn btn-primary" style="width: 100%;">Liên hệ ngay</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function mockStartCharging() {
+        const container = document.getElementById('active-session');
+        container.innerHTML = `
+            <div style="display: flex; flex-direction: column; align-items: center;">
+                <div style="font-size: 3rem; color: var(--primary); margin-bottom: 1rem;">
+                    <i class="fas fa-spinner fa-spin"></i>
+                </div>
+                <h4 style="color: var(--primary);">Đang sạc...</h4>
+                <p style="font-size: 1.5rem; font-weight: 800; margin: 0.5rem 0;">12.5 kWh</p>
+                <p style="color: var(--text-light);">Dự kiến: 37,500đ</p>
+                <button class="btn btn-outline" style="margin-top: 1rem; color: #ef4444; border-color: #ef4444;" onclick="location.reload()">
+                    Dừng sạc
+                </button>
+            </div>
+        `;
+    }
+</script>
+{% endblock %}

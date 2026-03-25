@@ -1,0 +1,34 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container" style="padding: 4rem 0; display: flex; justify-content: center;">
+    <div class="card" style="width: 100%; max-width: 500px;">
+        <h2 style="text-align: center; margin-bottom: 2rem;">Đăng ký Tài khoản</h2>
+        <form method="POST">
+            <div class="form-group">
+                <label class="form-label">Họ và Tên</label>
+                <input type="text" name="name" class="form-input" placeholder="Nguyễn Văn A" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Email</label>
+                <input type="email" name="email" class="form-input" placeholder="example@email.com" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Mật khẩu</label>
+                <input type="password" name="password" class="form-input" placeholder="••••••••" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Loại người dùng</label>
+                <select name="role" class="form-input">
+                    <option value="user">Người dùng (Khách hàng)</option>
+                    <option value="parking_owner">Chủ bãi đỗ xe</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">Đăng ký</button>
+        </form>
+        <p style="text-align: center; margin-top: 1.5rem; color: var(--text-light);">
+            Đã có tài khoản? <a href="{{ url_for('login') }}" style="color: var(--primary); font-weight: 600;">Đăng nhập</a>
+        </p>
+    </div>
+</div>
+{% endblock %}

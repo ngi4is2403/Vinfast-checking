@@ -1,0 +1,56 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<section class="hero">
+    <div class="container text-center">
+        <h1>Giải Pháp Quản Lý Bãi Đỗ & Sạc Xe Điện Thông Minh</h1>
+        <p>Tìm kiếm chỗ đỗ, đặt lịch sạc và thanh toán dễ dàng chỉ với vài chạm. Tiết kiệm thời gian, tối ưu hiệu suất.</p>
+        <div style="display: flex; gap: 1rem; justify-content: center;">
+            <a href="#booking" class="btn btn-primary">Tìm chỗ ngay</a>
+            <a href="{{ url_for('register') }}" class="btn btn-outline">Dành cho Chủ bãi xe</a>
+        </div>
+    </div>
+</section>
+
+<div class="container" id="booking" style="padding: 4rem 1.5rem;">
+    <h2 class="section-title">Các Bãi Đỗ Xe Tiêu Biểu</h2>
+    <div class="grid">
+        {% for lot in parking_lots %}
+        <div class="card">
+            <h3 style="margin-bottom: 0.5rem;">{{ lot.name }}</h3>
+            <p style="color: var(--text-light); margin-bottom: 1rem;">
+                <i class="fas fa-map-marker-alt"></i> {{ lot.address }}
+            </p>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <span class="badge badge-info">{{ lot.total_slots }} Chỗ tổng cộng</span>
+                <span class="badge badge-success">Sẵn sàng</span>
+            </div>
+            <a href="{{ url_for('login') }}" class="btn btn-primary" style="width: 100%; text-align: center;">Đặt chỗ ngay</a>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<section style="background: #ffffff; padding: 4rem 0;">
+    <div class="container text-center">
+        <h2 class="section-title">Tại sao nên chọn Park&Charge?</h2>
+        <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));">
+            <div>
+                <i class="fas fa-bolt" style="font-size: 2.5rem; color: var(--accent); margin-bottom: 1rem;"></i>
+                <h3>Sạc Siêu Tốc</h3>
+                <p>Hỗ trợ đa dạng các loại trạm sạc AC, DC và Sạc nhanh Fast Charging.</p>
+            </div>
+            <div>
+                <i class="fas fa-clock" style="font-size: 2.5rem; color: var(--primary); margin-bottom: 1rem;"></i>
+                <h3>Đặt Chỗ Trước</h3>
+                <p>Không còn lo lắng về việc hết chỗ khi đến nơi. Đặt lịch chỉ trong 1 phút.</p>
+            </div>
+            <div>
+                <i class="fas fa-shield-alt" style="font-size: 2.5rem; color: var(--secondary); margin-bottom: 1rem;"></i>
+                <h3>An Toàn Tuyệt Đối</h3>
+                <p>Hệ thống giám sát cảm biến IoT real-time đảm bảo an ninh cho phương tiện.</p>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

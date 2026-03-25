@@ -1,0 +1,64 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container" style="padding: 2rem 0;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+        <div>
+            <h1 class="section-title">Quản lý Bãi đỗ xe</h1>
+            <p style="color: var(--text-light);">Chào mừng trở lại, {{ current_user.name }}</p>
+        </div>
+        <button class="btn btn-primary"><i class="fas fa-plus"></i> Thêm Bãi Đỗ Mới</button>
+    </div>
+
+    <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 2rem;">
+        <div class="card" style="border-left: 4px solid var(--primary);">
+            <p style="color: var(--text-light); font-size: 0.875rem;">Tổng Doanh Thu</p>
+            <h2 style="font-size: 1.5rem;">12,500,000đ</h2>
+        </div>
+        <div class="card" style="border-left: 4px solid var(--secondary);">
+            <p style="color: var(--text-light); font-size: 0.875rem;">Lượt đặt chỗ (Tháng)</p>
+            <h2 style="font-size: 1.5rem;">342</h2>
+        </div>
+        <div class="card" style="border-left: 4px solid var(--accent);">
+            <p style="color: var(--text-light); font-size: 0.875rem;">Chỗ sạc đang dùng</p>
+            <h2 style="font-size: 1.5rem;">5/8</h2>
+        </div>
+        <div class="card" style="border-left: 4px solid #6366f1;">
+            <p style="color: var(--text-light); font-size: 0.875rem;">Tỉ lệ trống</p>
+            <h2 style="font-size: 1.5rem;">15%</h2>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3 style="margin-bottom: 1.5rem;">Danh sách Bãi đỗ xe của bạn</h3>
+        {% if lots %}
+        <div class="grid">
+            {% for lot in lots %}
+            <div style="border: 1px solid var(--border); padding: 1rem; border-radius: var(--radius);">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+                    <div>
+                        <h4 style="font-size: 1.125rem;">{{ lot.name }}</h4>
+                        <p style="font-size: 0.875rem; color: var(--text-light);">{{ lot.address }}</p>
+                    </div>
+                    <span class="badge badge-success">Đang hoạt động</span>
+                </div>
+                <div style="display: flex; gap: 1rem; font-size: 0.875rem; margin-bottom: 1.5rem;">
+                    <div><strong>{{ lot.total_slots }}</strong> Chỗ đỗ</div>
+                    <div><strong>2</strong> Trạm sạc</div>
+                </div>
+                <div style="display: flex; gap: 0.5rem;">
+                    <button class="btn btn-outline" style="flex: 1; font-size: 0.875rem;">Quản lý Slot</button>
+                    <button class="btn btn-outline" style="flex: 1; font-size: 0.875rem;">Xem Báo cáo</button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div style="text-align: center; padding: 3rem;">
+            <p style="color: var(--text-light); margin-bottom: 1rem;">Bạn chưa đăng ký bãi đỗ xe nào.</p>
+            <button class="btn btn-primary">Bắt đầu ngay</button>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

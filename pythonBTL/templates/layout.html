@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Park & Charge - Quản lý Bãi Đỗ & Trạm Sạc</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://kit.fontawesome.com/your-code.js" crossorigin="anonymous"></script>
+</head>
+<body>
+    <nav>
+        <div class="container nav-content">
+            <a href="{{ url_for('index') }}" class="logo">
+                <i class="fas fa-charging-station"></i>
+                Park&Charge
+            </a>
+            <div class="nav-links">
+                <a href="{{ url_for('index') }}" class="nav-link">Trang chủ</a>
+                {% if current_user.is_authenticated %}
+                    <a href="{{ url_for('dashboard') }}" class="nav-link">Bảng điều khiển</a>
+                    <a href="{{ url_for('logout') }}" class="btn btn-outline">Đăng xuất</a>
+                {% else %}
+                    <a href="{{ url_for('login') }}" class="nav-link">Đăng nhập</a>
+                    <a href="{{ url_for('register') }}" class="btn btn-primary">Tham gia ngay</a>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="flash-messages">
+                {% for category, message in messages %}
+                    <div class="flash-message bg-{{ category }} text-white">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer style="padding: 3rem 0; background: #1e293b; color: white; margin-top: 4rem;">
+        <div class="container" style="text-align: center;">
+            <p>&copy; 2024 Park&Charge - Dự án Quản lý Bãi Đỗ & Trạm Sạc Xe Điện</p>
+        </div>
+    </footer>
+</body>
+</html>
