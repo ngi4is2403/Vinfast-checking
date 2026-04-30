@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Đơn gửi xe — Admin ParkEV{% endblock %}
+{% block page_title %}Quản lý đơn gửi xe{% endblock %}
+{% block page_subtitle %}Theo dõi và xác nhận xe vào/ra{% endblock %}
+
+{% block content %}
+<!-- Filter -->
+<div class="card" style="margin-bottom:16px;">
+  <form method="GET" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+    <div class="form-group" style="margin:0;">
+      <label class="form-label">Tìm biển số</label>
+      <input name="search" type="text" class="form-control" placeholder="51A-12345" value="{{ search }}">
+    </div>
+    <div class="form-group" style="margin:0;">
+      <label class="form-label">Trạng thái</label>
+      <select name="status" class="form-control">
+        <option value="active"    {% if status_f=='active' %}selected{% endif %}>Đang hoạt động</option>
+        <option value="completed" {% if status_f=='completed' %}selected{% endif %}>Đã hoàn tất</option>
+        <option value=""          {% if not status_f %}selected{% endif %}>Tất cả</option>
+      </select>
+    </div>
+    <button type="submit" class="btn btn-primary" style="margin-bottom:1px;">🔍 Lọc</button>
+    <a href="{{ url_for('admin_parking_orders') }}" class="btn btn-outline" style="margin-bottom:1px;">Xóa lọc</a>
+  </form>
+</div>
+
+<div class="card">
+  {% if orders %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Biển số</th>
+            <th>Chủ xe</th>
+            <th>Loại xe</th>
+            <th>Vị trí</th>
+            <th>Thời gian vào</th>
+            <th>Thời gian ra</th>
+            <th>Thời lượng</th>
+            <th>Phí ước tính</th>
+            <th>Trạng thái</th>
+            <th>Thao tác</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for o in orders %}
+            <tr>
+              <td style="color:var(--text-muted);">{{ o.id }}</td>
+              <td class="td-bold">{{ o.plate_number }}</td>
+              <td>
+                <div>{{ o.full_name }}</div>
+                <div style="font-size:11px;color:var(--text-muted);">{{ o.phone }}</div>
+              </td>
+              <td style="font-size:12px;">{{ o.vehicle_type }}</td>
+              <td>
+                <span class="badge badge-cyan">{{ o.slot_code }}</span>
+                <span style="font-size:11px;color:var(--text-muted);">Khu {{ o.zone }}</span>
+              </td>
+              <td style="font-size:12px;color:var(--text-muted);">{{ o.time_in }}</td>
+              <td style="font-size:12px;color:var(--text-muted);">{{ o.time_out or '—' }}</td>
+              <td>
+                {% if o.status == 'active' %}
+                  <span class="badge badge-amber">
+                    {% if o.duration_hours is defined %}{{ o.duration_hours }}h{% else %}—{% endif %}
+                  </span>
+                {% else %}—{% endif %}
+              </td>
+              <td style="color:var(--success);font-weight:700;">
+                {% if o.total_fee %}
+                  {{ '{:,.0f}'.format(o.total_fee) }}đ
+                {% elif o.estimated_fee is defined and o.estimated_fee %}
+                  ~{{ '{:,.0f}'.format(o.estimated_fee) }}đ
+                {% else %}—{% endif %}
+              </td>
+              <td>
+                <span class="badge
+                  {% if o.status=='active' %}badge-blue
+                  {% elif o.status=='completed' %}badge-green
+                  {% else %}badge-gray{% endif %}">
+                  {{ {'active':'Đang gửi','completed':'Hoàn tất','cancelled':'Đã hủy'}.get(o.status, o.status) }}
+                </span>
+              </td>
+              <td>
+                {% if o.status == 'active' %}
+                  <form method="POST" action="{{ url_for('admin_checkout', oid=o.id) }}"
+                        onsubmit="return confirm('Xác nhận xe {{ o.plate_number }} ra bãi?')">
+                    <button type="submit" class="btn btn-success btn-xs">✅ Cho ra</button>
+                  </form>
+                {% else %}
+                  <span style="font-size:11px;color:var(--text-muted);">Hoàn tất</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <div class="empty-icon">🅿️</div>
+      <p>Không có đơn gửi xe nào.</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Đơn sạc — Admin ParkEV{% endblock %}
+{% block page_title %}Quản lý đơn sạc{% endblock %}
+{% block page_subtitle %}Theo dõi và xác nhận phiên sạc{% endblock %}
+
+{% block content %}
+<div class="card" style="margin-bottom:16px;">
+  <form method="GET" style="display:flex;gap:10px;align-items:flex-end;">
+    <div class="form-group" style="margin:0;">
+      <label class="form-label">Trạng thái</label>
+      <select name="status" class="form-control">
+        <option value="active"    {% if status_f=='active' %}selected{% endif %}>Đang sạc</option>
+        <option value="completed" {% if status_f=='completed' %}selected{% endif %}>Đã hoàn tất</option>
+        <option value=""          {% if not status_f %}selected{% endif %}>Tất cả</option>
+      </select>
+    </div>
+    <button type="submit" class="btn btn-primary" style="margin-bottom:1px;">🔍 Lọc</button>
+    <a href="{{ url_for('admin_charging_orders') }}" class="btn btn-outline" style="margin-bottom:1px;">Xóa lọc</a>
+  </form>
+</div>
+
+<div class="card">
+  {% if orders %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Biển số</th>
+            <th>Chủ xe</th>
+            <th>Trụ sạc</th>
+            <th>Loại sạc</th>
+            <th>Bắt đầu</th>
+            <th>Kết thúc</th>
+            <th>Thời lượng</th>
+            <th>kWh</th>
+            <th>Tổng phí</th>
+            <th>Trạng thái</th>
+            <th>Thao tác</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for o in orders %}
+            <tr>
+              <td style="color:var(--text-muted);">{{ o.id }}</td>
+              <td class="td-bold">{{ o.plate_number }}</td>
+              <td>
+                <div>{{ o.full_name }}</div>
+                <div style="font-size:11px;color:var(--text-muted);">{{ o.phone }}</div>
+              </td>
+              <td><span class="badge badge-violet">{{ o.station_code }}</span></td>
+              <td>
+                <span class="badge {% if o.charge_type=='fast' %}badge-amber{% else %}badge-cyan{% endif %}">
+                  {{ 'Nhanh ⚡' if o.charge_type=='fast' else 'Chậm 🐢' }}
+                </span>
+              </td>
+              <td style="font-size:12px;color:var(--text-muted);">{{ o.time_start }}</td>
+              <td style="font-size:12px;color:var(--text-muted);">{{ o.time_end or '—' }}</td>
+              <td>
+                {% if o.status == 'active' and o.duration_hours is defined %}
+                  <span class="badge badge-amber">{{ o.duration_hours }}h</span>
+                {% else %}—{% endif %}
+              </td>
+              <td style="color:var(--electric);">{{ o.kwh_consumed or '—' }}</td>
+              <td style="color:var(--success);font-weight:700;">
+                {{ '{:,.0f}'.format(o.total_fee) ~ 'đ' if o.total_fee else '—' }}
+              </td>
+              <td>
+                <span class="badge {% if o.status=='active' %}badge-violet{% else %}badge-green{% endif %}">
+                  {{ 'Đang sạc' if o.status=='active' else 'Hoàn tất' }}
+                </span>
+              </td>
+              <td>
+                {% if o.status == 'active' %}
+                  <form method="POST" action="{{ url_for('admin_end_charge', oid=o.id) }}"
+                        style="display:flex;gap:4px;align-items:center;">
+                    <input name="kwh" type="number" step="0.1" min="0"
+                           class="form-control" style="width:70px;padding:4px 8px;font-size:12px;"
+                           placeholder="kWh" required>
+                    <button type="submit" class="btn btn-warning btn-xs">⏹️ Kết thúc</button>
+                  </form>
+                {% else %}
+                  <span style="font-size:11px;color:var(--text-muted);">Hoàn tất</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <div class="empty-icon">⚡</div>
+      <p>Không có đơn sạc nào.</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

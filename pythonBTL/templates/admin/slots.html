@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}Vị trí đỗ — Admin ParkEV{% endblock %}
+{% block page_title %}Quản lý vị trí đỗ{% endblock %}
+{% block page_subtitle %}20 vị trí · Khu A (không sạc) · Khu B (có sạc){% endblock %}
+{% block page_actions %}
+  <button class="btn btn-primary" data-modal-open="modal-add-slot">+ Thêm vị trí</button>
+{% endblock %}
+
+{% block content %}
+
+<!-- Summary by zone -->
+<div class="stats-grid" style="margin-bottom:20px;">
+  {% set zone_a = slots | selectattr('zone','equalto','A') | list %}
+  {% set zone_b = slots | selectattr('zone','equalto','B') | list %}
+  {% set avail_a = zone_a | selectattr('status','equalto','available') | list %}
+  {% set avail_b = zone_b | selectattr('status','equalto','available') | list %}
+  <div class="stat-card">
+    <div class="stat-icon cyan">🅿️</div>
+    <div>
+      <div class="stat-value">{{ avail_a|length }}/{{ zone_a|length }}</div>
+      <div class="stat-label">Khu A — Không sạc (trống/tổng)</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon violet">⚡</div>
+    <div>
+      <div class="stat-value">{{ avail_b|length }}/{{ zone_b|length }}</div>
+      <div class="stat-label">Khu B — Có sạc (trống/tổng)</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon green">✅</div>
+    <div>
+      <div class="stat-value">{{ slots | selectattr('status','equalto','available') | list | length }}</div>
+      <div class="stat-label">Tổng trống</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon amber">🚗</div>
+    <div>
+      <div class="stat-value">{{ slots | selectattr('status','equalto','occupied') | list | length }}</div>
+      <div class="stat-label">Đang sử dụng</div>
+    </div>
+  </div>
+</div>
+
+<!-- Slot table -->
+<div class="card">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Mã vị trí</th>
+          <th>Khu</th>
+          <th>Loại</th>
+          <th>Sạc</th>
+          <th>Tầng/Khu vực</th>
+          <th>Trạng thái</th>
+          <th>Ghi chú</th>
+          <th>Thay đổi</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in slots %}
+          <tr>
+            <td class="td-bold">{{ s.slot_code }}</td>
+            <td><span class="badge {% if s.zone=='A' %}badge-cyan{% else %}badge-violet{% endif %}">Khu {{ s.zone }}</span></td>
+            <td>{{ 'Xe máy' if s.slot_type=='small' else 'Ô tô' if s.slot_type=='large' else 'Tất cả' }}</td>
+            <td>{{ '⚡ Có' if s.has_charging else '—' }}</td>
+            <td style="color:var(--text-muted);">{{ s.floor_area }}</td>
+            <td>
+              <span class="badge
+                {% if s.status=='available' %}badge-green
+                {% elif s.status=='occupied' %}badge-red
+                {% elif s.status=='reserved' %}badge-amber
+                {% else %}badge-gray{% endif %}">
+                {{ {'available':'Trống','occupied':'Đang dùng','reserved':'Đã giữ','maintenance':'Bảo trì'}.get(s.status, s.status) }}
+              </span>
+            </td>
+            <td style="color:var(--text-muted);font-size:12px;">{{ s.notes or '—' }}</td>
+            <td>
+              <form method="POST" action="{{ url_for('admin_slot_status', sid=s.id) }}" style="display:flex;gap:4px;align-items:center;">
+                <select name="status" class="form-control" style="padding:4px 8px;font-size:12px;width:120px;">
+                  {% for st in ['available','occupied','reserved','maintenance'] %}
+                    <option value="{{ st }}" {% if s.status==st %}selected{% endif %}>
+                      {{ {'available':'Trống','occupied':'Đang dùng','reserved':'Đã giữ','maintenance':'Bảo trì'}[st] }}
+                    </option>
+                  {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-primary btn-xs">Lưu</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modal: Thêm vị trí -->
+<div id="modal-add-slot" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:center;justify-content:center;">
+  <div class="card" style="width:100%;max-width:440px;">
+    <div class="card-header">
+      <div class="card-title">+ Thêm vị trí đỗ</div>
+      <button class="btn btn-outline btn-sm" data-modal-close="modal-add-slot">✕</button>
+    </div>
+    <form method="POST" action="{{ url_for('admin_add_slot') }}">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Mã vị trí *</label>
+          <input name="slot_code" type="text" class="form-control" placeholder="C01" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Khu vực *</label>
+          <select name="zone" class="form-control" required>
+            <option value="A">Khu A — Không sạc</option>
+            <option value="B">Khu B — Có sạc</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Loại vị trí</label>
+          <select name="slot_type" class="form-control">
+            <option value="small">Nhỏ (xe máy)</option>
+            <option value="large">Lớn (ô tô)</option>
+            <option value="both">Tất cả</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tầng/Khu vực</label>
+          <input name="floor_area" type="text" class="form-control" value="Tầng 1">
+        </div>
+      </div>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+          <input name="has_charging" type="checkbox" value="1"
+                 style="width:16px;height:16px;">
+          <span style="font-size:13px;">Gần trụ sạc điện</span>
+        </label>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Ghi chú</label>
+        <input name="notes" type="text" class="form-control" placeholder="Tùy chọn">
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-outline" data-modal-close="modal-add-slot">Hủy</button>
+        <button type="submit" class="btn btn-primary">Thêm</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

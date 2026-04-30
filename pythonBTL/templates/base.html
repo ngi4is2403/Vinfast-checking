@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}ParkEV System{% endblock %}</title>
+  <meta name="description" content="He thong quan ly bai do xe va sac xe dien thong minh">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  {# Áp dụng theme đã lưu TRƯỚC khi render để tránh flash #}
+  <script>
+    (function(){
+      var t = localStorage.getItem('parkev-theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
+  {% block head %}{% endblock %}
+</head>
+<body>
+
+{# ── Xác định có sidebar không ── #}
+{% set use_layout = session.get('user_id') and
+   request.endpoint not in ['index','login_page','register_page'] %}
+
+{% if use_layout %}
+{# ════════ LAYOUT CÓ SIDEBAR ════════ #}
+<div class="app-wrapper">
+
+  {# ── Sidebar ── #}
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">🚗</div>
+      <div class="logo-text">Park<span>EV</span></div>
+    </div>
+
+    <nav class="sidebar-nav">
+      {% set role = session.get('role','user') %}
+
+      {% if role == 'user' %}
+        <div class="nav-section-title">Tong quan</div>
+        <a href="{{ url_for('user_dashboard') }}"
+           class="nav-link {% if request.endpoint=='user_dashboard' %}active{% endif %}">
+          <span class="nav-icon">🏠</span> Dashboard
+        </a>
+        <div class="nav-section-title">Phuong tien</div>
+        <a href="{{ url_for('user_vehicles') }}"
+           class="nav-link {% if request.endpoint=='user_vehicles' %}active{% endif %}">
+          <span class="nav-icon">🚙</span> Xe cua toi
+        </a>
+        <div class="nav-section-title">Giao dich</div>
+        <a href="{{ url_for('user_park') }}"
+           class="nav-link {% if request.endpoint=='user_park' %}active{% endif %}">
+          <span class="nav-icon">🅿️</span> Gui xe
+        </a>
+        <a href="{{ url_for('user_checkout') }}"
+           class="nav-link {% if request.endpoint=='user_checkout' %}active{% endif %}">
+          <span class="nav-icon">🚪</span> Lay xe
+        </a>
+        <a href="{{ url_for('user_charge') }}"
+           class="nav-link {% if request.endpoint=='user_charge' %}active{% endif %}">
+          <span class="nav-icon">⚡</span> Sac xe
+        </a>
+        <a href="{{ url_for('user_history') }}"
+           class="nav-link {% if request.endpoint=='user_history' %}active{% endif %}">
+          <span class="nav-icon">📋</span> Lich su
+        </a>
+
+      {% elif role == 'admin' %}
+        <div class="nav-section-title">Van hanh</div>
+        <a href="{{ url_for('admin_dashboard') }}"
+           class="nav-link {% if request.endpoint=='admin_dashboard' %}active{% endif %}">
+          <span class="nav-icon">🏠</span> Dashboard
+        </a>
+        <a href="{{ url_for('admin_parking_orders') }}"
+           class="nav-link {% if request.endpoint=='admin_parking_orders' %}active{% endif %}">
+          <span class="nav-icon">🚗</span> Xe trong bai
+        </a>
+        <a href="{{ url_for('admin_charging_orders') }}"
+           class="nav-link {% if request.endpoint=='admin_charging_orders' %}active{% endif %}">
+          <span class="nav-icon">⚡</span> Don sac
+        </a>
+        <div class="nav-section-title">Quan ly</div>
+        <a href="{{ url_for('admin_slots') }}"
+           class="nav-link {% if request.endpoint=='admin_slots' %}active{% endif %}">
+          <span class="nav-icon">🅿️</span> Vi tri do
+        </a>
+        <a href="{{ url_for('admin_stations') }}"
+           class="nav-link {% if request.endpoint=='admin_stations' %}active{% endif %}">
+          <span class="nav-icon">🔌</span> Tru sac
+        </a>
+
+      {% elif role == 'director' %}
+        <div class="nav-section-title">Bao cao</div>
+        <a href="{{ url_for('director_report') }}" class="nav-link active">
+          <span class="nav-icon">📊</span> Bao cao thang
+        </a>
+      {% endif %}
+    </nav>
+
+    <div class="sidebar-footer">
+      {# ── Theme toggle ── #}
+      <button class="theme-toggle-btn" id="themeToggleBtn" title="Chuyển giao diện">
+        <span class="theme-icon" id="themeIcon">🌙</span>
+        <span id="themeLabel">Chế độ tối</span>
+      </button>
+      <div class="user-badge">
+        <div class="avatar">{{ session.get('full_name','U')[0] }}</div>
+        <div class="user-info">
+          <div class="user-name">{{ session.get('full_name','') }}</div>
+          <div class="user-role">
+            {% if role=='admin' %}Admin bai do
+            {% elif role=='director' %}Tong giam doc
+            {% else %}Khach hang{% endif %}
+          </div>
+        </div>
+        {# Nút đăng xuất → mở modal xác nhận #}
+        <button class="logout-btn" id="logoutTriggerBtn" title="Dang xuat">⏏</button>
+      </div>
+    </div>
+  </aside>
+
+  {# ── Main content ── #}
+  <main class="main-content">
+    <div class="page-header">
+      <div>
+        <div class="page-title">{% block page_title %}{% endblock %}</div>
+        <div class="page-subtitle">{% block page_subtitle %}{% endblock %}</div>
+      </div>
+      <div>{% block page_actions %}{% endblock %}</div>
+    </div>
+
+    <div class="page-body">
+      {# Flash messages inside layout #}
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for cat, msg in messages %}
+          <div class="alert alert-{{ cat }}">
+            {% if cat=='success' %}✅{% elif cat=='danger' %}❌{% elif cat=='warning' %}⚠️{% else %}ℹ️{% endif %}
+            {{ msg }}
+          </div>
+        {% endfor %}
+      {% endwith %}
+
+{% else %}
+{# ════════ LAYOUT KHÔNG SIDEBAR (landing, login, register) ════════ #}
+      {# Flash messages for public pages #}
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for cat, msg in messages %}
+          <div class="alert alert-{{ cat }}"
+               style="position:fixed;top:16px;right:16px;z-index:999;max-width:360px;">
+            {{ msg }}
+          </div>
+        {% endfor %}
+      {% endwith %}
+{% endif %}
+
+{# ════════ ĐÂY LÀ NƠI DUY NHẤT ĐỊNH NGHĨA block content ════════ #}
+{% block content %}{% endblock %}
+
+{% if use_layout %}
+    </div>{# end page-body #}
+  </main>
+</div>{# end app-wrapper #}
+{% endif %}
+
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+{% block scripts %}{% endblock %}
+
+{# ── Modal xác nhận đăng xuất ── #}
+{% if use_layout %}
+<div class="logout-modal-overlay" id="logoutModal">
+  <div class="logout-modal">
+    <span class="modal-icon">👋</span>
+    <h3>Đăng xuất?</h3>
+    <p>Bạn có chắc muốn thoát khỏi hệ thống<br>ParkEV không?</p>
+    <div class="logout-modal-actions">
+      <button class="btn btn-outline" id="logoutCancelBtn">Ở lại</button>
+      <a href="{{ url_for('logout') }}" class="btn btn-danger" id="logoutConfirmBtn">Đăng xuất</a>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+</body>
+</html>

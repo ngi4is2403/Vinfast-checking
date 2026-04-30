@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}ParkEV — Bãi đỗ xe & Sạc điện thông minh{% endblock %}
+
+{% block content %}
+<!-- ── Landing Nav ── -->
+<nav class="landing-nav">
+  <div class="landing-logo">
+    <div class="logo-dot"></div>
+    ParkEV System
+  </div>
+  <div class="landing-actions">
+    <a href="{{ url_for('login_page') }}" class="btn btn-outline">Đăng nhập</a>
+    <a href="{{ url_for('register_page') }}" class="btn btn-primary">Đăng ký</a>
+  </div>
+</nav>
+
+<!-- ── Hero ── -->
+<section class="hero">
+  <div class="hero-badge">🚗 Hệ thống quản lý thông minh</div>
+  <h1>Bãi đỗ xe &amp; Sạc điện<br><span class="gradient-text">Trong một nền tảng</span></h1>
+  <p>Quản lý toàn bộ bãi đỗ xe, trụ sạc xe điện, và theo dõi báo cáo doanh thu — mọi lúc, mọi nơi.</p>
+  <div class="hero-actions">
+    <a href="{{ url_for('register_page') }}" class="btn btn-primary" style="font-size:15px;padding:12px 28px;">
+      Bắt đầu ngay →
+    </a>
+    <a href="{{ url_for('login_page') }}" class="btn btn-outline" style="font-size:15px;padding:12px 28px;">
+      Đăng nhập
+    </a>
+  </div>
+</section>
+
+<!-- ── Features ── -->
+<section class="features-section">
+  <div class="section-title">Tính năng nổi bật</div>
+  <div class="section-sub">Mọi thứ bạn cần để vận hành bãi đỗ xe hiện đại</div>
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon">🅿️</div>
+      <div class="feature-title">Quản lý vị trí đỗ</div>
+      <div class="feature-desc">20 vị trí đỗ chia thành 2 khu. Khu A không sạc, Khu B có trụ sạc điện. Theo dõi trạng thái theo thời gian thực.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">⚡</div>
+      <div class="feature-title">Sạc xe điện</div>
+      <div class="feature-desc">Hệ thống 6 trụ sạc gồm sạc chậm và sạc nhanh. Tự động tính phí dựa trên số kWh tiêu thụ.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">📊</div>
+      <div class="feature-title">Báo cáo doanh thu</div>
+      <div class="feature-desc">Dashboard tổng giám đốc với biểu đồ doanh thu theo ngày, tỷ lệ lấp đầy, thống kê khách hàng.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔐</div>
+      <div class="feature-title">Phân quyền 3 cấp</div>
+      <div class="feature-desc">User — Admin bãi đỗ — Tổng giám đốc. Mỗi vai trò có giao diện và quyền truy cập riêng biệt.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🚗</div>
+      <div class="feature-title">Quản lý phương tiện</div>
+      <div class="feature-desc">Khách hàng có thể quản lý nhiều xe. Hỗ trợ xe máy, ô tô, xe máy điện và ô tô điện.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">📋</div>
+      <div class="feature-title">Lịch sử giao dịch</div>
+      <div class="feature-desc">Xem toàn bộ lịch sử gửi xe và sạc điện. Lọc theo tháng, loại giao dịch và trạng thái.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Roles ── -->
+<section class="roles-section">
+  <div class="section-title" style="margin-bottom:8px;">3 Vai trò trong hệ thống</div>
+  <div class="section-sub" style="margin-bottom:40px;">Mỗi vai trò có giao diện và chức năng phù hợp</div>
+  <div class="roles-grid">
+    <div class="role-card">
+      <div class="role-badge">Khách hàng</div>
+      <div class="role-title">👤 Người dùng</div>
+      <ul class="role-features">
+        <li>Đăng ký và đăng nhập</li>
+        <li>Quản lý xe cá nhân</li>
+        <li>Gửi xe và lấy xe</li>
+        <li>Thuê trụ sạc xe điện</li>
+        <li>Xem lịch sử giao dịch</li>
+      </ul>
+    </div>
+    <div class="role-card">
+      <div class="role-badge" style="background:rgba(34,211,238,.1);color:var(--secondary);">Admin bãi đỗ</div>
+      <div class="role-title">🛡️ Admin vận hành</div>
+      <ul class="role-features">
+        <li>Xem xe đang trong bãi</li>
+        <li>Xác nhận xe vào / ra</li>
+        <li>Quản lý vị trí đỗ 20 slot</li>
+        <li>Quản lý 6 trụ sạc</li>
+        <li>Xử lý đơn sạc đang hoạt động</li>
+      </ul>
+    </div>
+    <div class="role-card">
+      <div class="role-badge" style="background:rgba(167,139,250,.1);color:var(--electric);">Tổng giám đốc</div>
+      <div class="role-title">📈 Tổng giám đốc</div>
+      <ul class="role-features">
+        <li>Báo cáo doanh thu tháng</li>
+        <li>Biểu đồ theo từng ngày</li>
+        <li>Thống kê khách hàng</li>
+        <li>Hiệu suất bãi đỗ</li>
+        <li>So sánh tháng trước</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ── Demo accounts ── -->
+<section style="padding:60px 48px;text-align:center;max-width:700px;margin:0 auto;">
+  <div class="section-title" style="font-size:22px;margin-bottom:8px;">Tài khoản demo</div>
+  <div class="section-sub" style="margin-bottom:28px;">Thử ngay với các tài khoản có sẵn</div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;">
+    <div class="card" style="text-align:center;">
+      <div style="font-size:24px;margin-bottom:8px;">👤</div>
+      <div style="font-weight:700;margin-bottom:6px;">User</div>
+      <div style="font-size:12px;color:var(--text-muted);">user@demo.com<br>123456</div>
+    </div>
+    <div class="card" style="text-align:center;">
+      <div style="font-size:24px;margin-bottom:8px;">🛡️</div>
+      <div style="font-weight:700;margin-bottom:6px;">Admin</div>
+      <div style="font-size:12px;color:var(--text-muted);">admin@demo.com<br>123456</div>
+    </div>
+    <div class="card" style="text-align:center;">
+      <div style="font-size:24px;margin-bottom:8px;">📊</div>
+      <div style="font-weight:700;margin-bottom:6px;">Giám đốc</div>
+      <div style="font-size:12px;color:var(--text-muted);">director@demo.com<br>123456</div>
+    </div>
+  </div>
+  <div style="margin-top:28px;">
+    <a href="{{ url_for('login_page') }}" class="btn btn-primary" style="font-size:15px;padding:12px 32px;">
+      Đăng nhập ngay →
+    </a>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}Sạc xe — ParkEV{% endblock %}
+{% block page_title %}Thuê sạc{% endblock %}
+{% block page_subtitle %}Dịch vụ sạc xe điện{% endblock %}
+
+{% block content %}
+{% if active_charging %}
+  <div class="alert alert-info" style="margin-bottom:20px;">
+    ⚡ Bạn đang có <strong>{{ active_charging|length }}</strong> đơn sạc đang hoạt động.
+  </div>
+  {% for c in active_charging %}
+    <div class="card" style="margin-bottom:12px;border-color:var(--electric);">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <span style="font-size:20px;">⚡</span>
+          <strong style="margin-left:8px;">Trụ {{ c.station_code }}</strong>
+          <span class="badge badge-violet" style="margin-left:8px;">
+            {{ 'Sạc nhanh' if c.charge_type=='fast' else 'Sạc chậm' }}
+          </span>
+        </div>
+        <form method="POST" action="{{ url_for('user_end_charge', oid=c.id) }}" style="display:flex;align-items:center;gap:10px;">
+          <div>
+            <label style="font-size:12px;color:var(--text-muted);">Số kWh đã sạc:</label>
+            <input name="kwh_consumed" type="number" step="0.1" min="0" class="form-control"
+                   style="width:100px;margin-top:4px;" placeholder="20.0" required>
+          </div>
+          <button type="submit" class="btn btn-warning">
+            ⏹️ Kết thúc sạc
+          </button>
+        </form>
+      </div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:8px;">Bắt đầu: {{ c.time_start }}</div>
+    </div>
+  {% endfor %}
+  <hr style="border-color:var(--border);margin:20px 0;">
+{% endif %}
+
+{% if not vehicles %}
+  <div class="empty-state">
+    <div class="empty-icon">⚡</div>
+    <p>Bạn không có xe điện nào. Chỉ xe điện mới có thể sử dụng dịch vụ sạc.</p>
+    <a href="{{ url_for('user_vehicles') }}" class="btn btn-primary mt-3">Thêm xe điện</a>
+  </div>
+{% else %}
+<form method="POST" action="{{ url_for('user_charge') }}">
+  <input type="hidden" name="station_id" id="station_id" value="">
+
+  <div class="grid-2" style="align-items:start;">
+    <!-- Left: Chọn xe & loại sạc -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">1️⃣ Thông tin sạc</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Xe điện</label>
+        <select name="vehicle_id" id="vehicle_id" class="form-control" required>
+          <option value="">-- Chọn xe điện --</option>
+          {% for v in vehicles %}
+            <option value="{{ v.id }}" data-vtype="{{ v.vehicle_type }}">
+              {{ v.plate_number }} — {{ v.brand }} {{ v.model }}
+              {% if v.battery_capacity %}({{ v.battery_capacity }} kWh){% endif %}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Loại sạc</label>
+        <select name="charge_type" id="charge_type" class="form-control" required>
+          <option value="slow">🐢 Sạc chậm — 8.000đ/kWh</option>
+          <option value="fast">⚡ Sạc nhanh — 12.000đ/kWh</option>
+        </select>
+      </div>
+
+      <!-- Bảng giá -->
+      <div style="background:var(--bg-card2);border-radius:var(--radius-sm);padding:14px;margin-top:8px;">
+        <div style="font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:10px;text-transform:uppercase;">Bảng giá sạc</div>
+        <div style="font-size:13px;line-height:2;">
+          <div>🔌 Phí giữ chỗ: <strong style="color:var(--warning);">10.000đ/lượt</strong></div>
+          <div>🐢 Sạc chậm: <strong style="color:var(--secondary);">8.000đ/kWh</strong></div>
+          <div>⚡ Sạc nhanh: <strong style="color:var(--electric);">12.000đ/kWh</strong></div>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-block mt-4"
+              onclick="return checkStation()">
+        ⚡ Bắt đầu sạc
+      </button>
+    </div>
+
+    <!-- Right: Chọn trụ sạc -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">2️⃣ Chọn trụ sạc</div>
+        <div class="card-subtitle">Tất cả trụ tại Khu B</div>
+      </div>
+
+      {% if stations %}
+        {% set slow_stations = stations | selectattr('station_type','equalto','slow') | list %}
+        {% set fast_stations = stations | selectattr('station_type','equalto','fast') | list %}
+
+        {% if slow_stations %}
+          <div style="font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;">🐢 Sạc chậm</div>
+          <div class="station-grid mb-4">
+            {% for s in slow_stations %}
+              <div class="station-card" data-station-id="{{ s.id }}" data-charge-type="slow">
+                <div class="station-icon">🔌</div>
+                <div class="station-code">{{ s.station_code }}</div>
+                <div class="station-type">Sạc chậm</div>
+                <div class="station-power">{{ s.power_kw }} kW</div>
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        {% if fast_stations %}
+          <div style="font-size:12px;font-weight:700;color:var(--electric);margin-bottom:8px;margin-top:12px;text-transform:uppercase;">⚡ Sạc nhanh</div>
+          <div class="station-grid">
+            {% for s in fast_stations %}
+              <div class="station-card" data-station-id="{{ s.id }}" data-charge-type="fast"
+                   style="border-color:rgba(167,139,250,.3);">
+                <div class="station-icon">⚡</div>
+                <div class="station-code">{{ s.station_code }}</div>
+                <div class="station-type">Sạc nhanh</div>
+                <div class="station-power" style="color:var(--electric);">{{ s.power_kw }} kW</div>
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% else %}
+        <div class="empty-state">
+          <div class="empty-icon">⚡</div>
+          <p>Tất cả trụ sạc đang bận hoặc bảo trì.</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</form>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function checkStation() {
+  const vid = document.getElementById('vehicle_id')?.value;
+  const sid = document.getElementById('station_id')?.value;
+  if (!vid) { alert('Vui lòng chọn xe điện.'); return false; }
+  if (!sid) { alert('Vui lòng chọn trụ sạc.'); return false; }
+  return true;
+}
+</script>
+{% endblock %}

@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Trụ sạc — Admin ParkEV{% endblock %}
+{% block page_title %}Quản lý trụ sạc{% endblock %}
+{% block page_subtitle %}Khu B · 6 trụ sạc (3 chậm + 3 nhanh){% endblock %}
+{% block page_actions %}
+  <button class="btn btn-primary" data-modal-open="modal-add-station">+ Thêm trụ</button>
+{% endblock %}
+
+{% block content %}
+
+<!-- Summary -->
+<div class="stats-grid" style="margin-bottom:20px;">
+  {% set avail = stations | selectattr('status','equalto','available') | list %}
+  {% set busy  = stations | selectattr('status','equalto','busy') | list %}
+  {% set slow  = stations | selectattr('station_type','equalto','slow') | list %}
+  {% set fast  = stations | selectattr('station_type','equalto','fast') | list %}
+  <div class="stat-card">
+    <div class="stat-icon green">✅</div>
+    <div>
+      <div class="stat-value">{{ avail|length }}</div>
+      <div class="stat-label">Trụ sẵn sàng</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon violet">⚡</div>
+    <div>
+      <div class="stat-value">{{ busy|length }}</div>
+      <div class="stat-label">Đang sạc</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon cyan">🐢</div>
+    <div>
+      <div class="stat-value">{{ slow|length }}</div>
+      <div class="stat-label">Trụ sạc chậm</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon amber">⚡</div>
+    <div>
+      <div class="stat-value">{{ fast|length }}</div>
+      <div class="stat-label">Trụ sạc nhanh</div>
+    </div>
+  </div>
+</div>
+
+<!-- Visual station cards -->
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-bottom:24px;">
+  {% for s in stations %}
+    <div class="card" style="
+      border-color: {% if s.status=='available' %}rgba(16,185,129,.4){% elif s.status=='busy' %}rgba(167,139,250,.4){% else %}var(--border){% endif %};
+      text-align:center;">
+      <div style="font-size:36px;margin-bottom:8px;">
+        {{ '⚡' if s.station_type=='fast' else '🔌' }}
+      </div>
+      <div style="font-size:18px;font-weight:800;">{{ s.station_code }}</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">
+        {{ 'Sạc nhanh' if s.station_type=='fast' else 'Sạc chậm' }} · {{ s.power_kw }} kW
+      </div>
+      <div style="margin-top:8px;">
+        <span class="badge {% if s.status=='available' %}badge-green{% elif s.status=='busy' %}badge-violet{% else %}badge-gray{% endif %}">
+          {{ {'available':'Sẵn sàng','busy':'Đang sạc','maintenance':'Bảo trì'}.get(s.status, s.status) }}
+        </span>
+      </div>
+      <form method="POST" action="{{ url_for('admin_station_status', sid=s.id) }}"
+            style="margin-top:10px;display:flex;gap:4px;align-items:center;justify-content:center;">
+        <select name="status" class="form-control" style="padding:4px 8px;font-size:12px;width:110px;">
+          {% for st in ['available','busy','maintenance'] %}
+            <option value="{{ st }}" {% if s.status==st %}selected{% endif %}>
+              {{ {'available':'Sẵn sàng','busy':'Đang sạc','maintenance':'Bảo trì'}[st] }}
+            </option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-primary btn-xs">Lưu</button>
+      </form>
+    </div>
+  {% endfor %}
+</div>
+
+<!-- Modal: Thêm trụ -->
+<div id="modal-add-station" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:center;justify-content:center;">
+  <div class="card" style="width:100%;max-width:380px;">
+    <div class="card-header">
+      <div class="card-title">+ Thêm trụ sạc mới</div>
+      <button class="btn btn-outline btn-sm" data-modal-close="modal-add-station">✕</button>
+    </div>
+    <form method="POST" action="{{ url_for('admin_add_station') }}">
+      <div class="form-group">
+        <label class="form-label">Mã trụ *</label>
+        <input name="station_code" type="text" class="form-control" placeholder="CS07" required>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Loại sạc *</label>
+          <select name="station_type" class="form-control" required>
+            <option value="slow">🐢 Sạc chậm</option>
+            <option value="fast">⚡ Sạc nhanh</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Công suất (kW) *</label>
+          <input name="power_kw" type="number" step="0.1" min="1" class="form-control" value="7.4" required>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Khu vực</label>
+        <input name="area" type="text" class="form-control" value="Khu B">
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-outline" data-modal-close="modal-add-station">Hủy</button>
+        <button type="submit" class="btn btn-primary">Thêm</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

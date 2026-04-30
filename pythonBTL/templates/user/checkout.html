@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Lấy xe — ParkEV{% endblock %}
+{% block page_title %}Lấy xe{% endblock %}
+{% block page_subtitle %}Xác nhận lấy xe và thanh toán{% endblock %}
+
+{% block content %}
+{% if orders %}
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;">
+    {% for order in orders %}
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+          <div style="font-size:40px;">
+            {% if order.vehicle_type in ['e_motorcycle','e_car'] %}⚡{% endif %}
+            {% if order.vehicle_type in ['motorcycle','e_motorcycle'] %}🏍️{% else %}🚗{% endif %}
+          </div>
+          <div>
+            <div style="font-size:20px;font-weight:800;color:var(--primary);">{{ order.plate_number }}</div>
+            <div style="font-size:13px;color:var(--text-muted);">{{ order.brand }} {{ order.model }}</div>
+          </div>
+          <span class="badge badge-blue" style="margin-left:auto;">Đang gửi</span>
+        </div>
+
+        <div style="background:var(--bg-card2);border-radius:var(--radius-sm);padding:14px;margin-bottom:16px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px;">
+            <div>
+              <div style="color:var(--text-muted);font-size:11px;margin-bottom:2px;">VỊ TRÍ</div>
+              <div style="font-weight:700;">{{ order.slot_code }} (Khu {{ order.zone }})</div>
+            </div>
+            <div>
+              <div style="color:var(--text-muted);font-size:11px;margin-bottom:2px;">THỜI GIAN VÀO</div>
+              <div style="font-weight:600;">{{ order.time_in }}</div>
+            </div>
+            <div>
+              <div style="color:var(--text-muted);font-size:11px;margin-bottom:2px;">ĐƠN GIÁ</div>
+              <div style="color:var(--warning);font-weight:700;">{{ '{:,.0f}'.format(order.unit_price) }}đ/giờ</div>
+            </div>
+            <div>
+              <div style="color:var(--text-muted);font-size:11px;margin-bottom:2px;">ĐỊA ĐIỂM</div>
+              <div>{{ order.floor_area }}</div>
+            </div>
+          </div>
+        </div>
+
+        <form method="POST" action="{{ url_for('do_checkout', oid=order.id) }}"
+              onsubmit="return confirm('Xác nhận lấy xe {{ order.plate_number }}? Phí sẽ được tính ngay.')">
+          <button type="submit" class="btn btn-success btn-block">
+            🚪 Lấy xe & Thanh toán
+          </button>
+        </form>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="empty-state">
+    <div class="empty-icon">🚪</div>
+    <p>Bạn không có xe nào đang gửi trong bãi.</p>
+    <a href="{{ url_for('user_park') }}" class="btn btn-primary mt-3">Gửi xe ngay</a>
+  </div>
+{% endif %}
+{% endblock %}

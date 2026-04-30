@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard — ParkEV{% endblock %}
+{% block page_title %}Bảng điều khiển vận hành{% endblock %}
+{% block page_subtitle %}Tổng quan trạng thái bãi đỗ{% endblock %}
+
+{% block content %}
+<!-- Stat cards -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-icon cyan">🅿️</div>
+    <div>
+      <div class="stat-value">{{ total_slots }}</div>
+      <div class="stat-label">Tổng vị trí đỗ</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon green">✅</div>
+    <div>
+      <div class="stat-value">{{ available_slots }}</div>
+      <div class="stat-label">Vị trí trống</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon amber">🚗</div>
+    <div>
+      <div class="stat-value">{{ occupied_slots }}</div>
+      <div class="stat-label">Vị trí đang dùng</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon purple">⚡</div>
+    <div>
+      <div class="stat-value">{{ total_stations }}</div>
+      <div class="stat-label">Tổng trụ sạc</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon green">🔌</div>
+    <div>
+      <div class="stat-value">{{ avail_stations }}</div>
+      <div class="stat-label">Trụ sạc sẵn</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon violet">⚡</div>
+    <div>
+      <div class="stat-value">{{ busy_stations }}</div>
+      <div class="stat-label">Trụ đang sạc</div>
+    </div>
+  </div>
+</div>
+
+<div class="grid-2">
+  <!-- Active parking -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-title">🚗 Xe đang trong bãi ({{ active_parking|length }})</div>
+        <div class="card-subtitle">Xem đầy đủ tại mục "Xe trong bãi"</div>
+      </div>
+      <a href="{{ url_for('admin_parking_orders') }}" class="btn btn-outline btn-sm">Xem tất cả</a>
+    </div>
+    {% if active_parking %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Biển số</th>
+              <th>Vị trí</th>
+              <th>Vào lúc</th>
+              <th>Giờ</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for o in active_parking[:8] %}
+              <tr>
+                <td class="td-bold">{{ o.plate_number }}</td>
+                <td>{{ o.slot_code }}</td>
+                <td style="font-size:12px;color:var(--text-muted);">{{ o.time_in[11:16] }}</td>
+                <td><span class="badge badge-amber">{{ o.duration_hours }}h</span></td>
+                <td>
+                  <form method="POST" action="{{ url_for('admin_checkout', oid=o.order_id) }}"
+                        onsubmit="return confirm('Xác nhận xe {{ o.plate_number }} ra bãi?')">
+                    <button type="submit" class="btn btn-success btn-xs">Cho ra</button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state" style="padding:24px 0;">
+        <div class="empty-icon">🅿️</div>
+        <p>Bãi đang trống</p>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Active charging -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-title">⚡ Đang sạc ({{ active_charging|length }})</div>
+        <div class="card-subtitle">Các trụ sạc đang hoạt động</div>
+      </div>
+      <a href="{{ url_for('admin_charging_orders') }}" class="btn btn-outline btn-sm">Xem tất cả</a>
+    </div>
+    {% if active_charging %}
+      {% for o in active_charging %}
+        <div style="background:var(--bg-card2);border-radius:var(--radius-sm);padding:12px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+          <div>
+            <div style="font-weight:700;">{{ o.plate_number }}</div>
+            <div style="font-size:12px;color:var(--text-muted);">Trụ {{ o.station_code }} · {{ o.duration_hours }}h</div>
+          </div>
+          <span class="badge {% if o.charge_type=='fast' %}badge-violet{% else %}badge-cyan{% endif %}">
+            {{ 'Nhanh' if o.charge_type=='fast' else 'Chậm' }}
+          </span>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="empty-state" style="padding:24px 0;">
+        <div class="empty-icon">🔌</div>
+        <p>Không có xe đang sạc</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Quick actions -->
+<div class="card" style="margin-top:20px;">
+  <div class="card-title" style="margin-bottom:14px;">⚙️ Quản lý nhanh</div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;">
+    <a href="{{ url_for('admin_parking_orders') }}" class="btn btn-outline">🚗 Đơn gửi xe</a>
+    <a href="{{ url_for('admin_charging_orders') }}" class="btn btn-outline">⚡ Đơn sạc</a>
+    <a href="{{ url_for('admin_slots') }}" class="btn btn-outline">🅿️ Vị trí đỗ</a>
+    <a href="{{ url_for('admin_stations') }}" class="btn btn-outline">🔌 Trụ sạc</a>
+  </div>
+</div>
+{% endblock %}

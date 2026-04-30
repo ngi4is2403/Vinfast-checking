@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Đăng ký — ParkEV{% endblock %}
+{% block content %}
+<div class="auth-page">
+  <div class="auth-box" style="max-width:460px;">
+    <div class="auth-logo">
+      <div class="logo-circle">🚗</div>
+      <div class="auth-title">Tạo tài khoản</div>
+      <div class="auth-subtitle">Tham gia hệ thống ParkEV ngay hôm nay</div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for cat, msg in messages %}
+        <div class="alert alert-{{ cat }}">{{ msg }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    <form method="POST" action="{{ url_for('register_page') }}">
+      <div class="form-group">
+        <label class="form-label">Họ và tên</label>
+        <input id="full_name" name="full_name" type="text" class="form-control"
+               placeholder="Nguyễn Văn A" required>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Số điện thoại</label>
+          <input id="phone" name="phone" type="tel" class="form-control"
+                 placeholder="0901234567" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input id="email" name="email" type="email" class="form-control"
+                 placeholder="example@email.com" required autocomplete="email">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Mật khẩu</label>
+          <input id="password" name="password" type="password" class="form-control"
+                 placeholder="Tối thiểu 6 ký tự" required autocomplete="new-password">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Xác nhận mật khẩu</label>
+          <input id="confirm_password" name="confirm_password" type="password"
+                 class="form-control" placeholder="Nhập lại mật khẩu" required>
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block" style="margin-top:4px;">
+        Tạo tài khoản →
+      </button>
+    </form>
+
+    <div class="auth-divider">đã có tài khoản?</div>
+    <div style="text-align:center;font-size:13px;color:var(--text-muted);">
+      <a href="{{ url_for('login_page') }}" style="color:var(--primary);font-weight:600;">Đăng nhập ngay</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

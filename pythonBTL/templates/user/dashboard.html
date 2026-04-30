@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — ParkEV{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block page_subtitle %}Tổng quan hoạt động cá nhân{% endblock %}
+
+{% block content %}
+<!-- ── Stat cards ── -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-icon purple">🚗</div>
+    <div>
+      <div class="stat-value">{{ vehicles|length }}</div>
+      <div class="stat-label">Phương tiện đăng ký</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon cyan">🅿️</div>
+    <div>
+      <div class="stat-value">{{ active_parking|length }}</div>
+      <div class="stat-label">Xe đang gửi</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon green">💰</div>
+    <div>
+      <div class="stat-value" style="font-size:18px;">{{ '{:,.0f}'.format(history.total_spent) }}đ</div>
+      <div class="stat-label">Tổng chi tiêu</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon amber">📋</div>
+    <div>
+      <div class="stat-value">{{ history.parking_orders|length + history.charging_orders|length }}</div>
+      <div class="stat-label">Tổng giao dịch</div>
+    </div>
+  </div>
+</div>
+
+<div class="grid-2">
+  <!-- Active parking -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-title">🚗 Xe đang gửi</div>
+        <div class="card-subtitle">Đơn gửi xe đang hoạt động</div>
+      </div>
+      <a href="{{ url_for('user_park') }}" class="btn btn-primary btn-sm">+ Gửi xe</a>
+    </div>
+    {% if active_parking %}
+      {% for order in active_parking %}
+        <div style="background:var(--bg-card2);border-radius:var(--radius-sm);padding:14px;margin-bottom:10px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <div style="font-weight:700;">{{ order.plate_number }}</div>
+              <div style="font-size:12px;color:var(--text-muted);">{{ order.slot_code }} · Khu {{ order.zone }}</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Vào: {{ order.time_in }}</div>
+            </div>
+            <a href="{{ url_for('user_checkout') }}" class="btn btn-warning btn-sm">Lấy xe</a>
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="empty-state" style="padding:28px 0;">
+        <div class="empty-icon">🅿️</div>
+        <p>Không có xe đang gửi</p>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Recent transactions -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-title">📋 Giao dịch gần đây</div>
+        <div class="card-subtitle">5 giao dịch mới nhất</div>
+      </div>
+      <a href="{{ url_for('user_history') }}" class="btn btn-outline btn-sm">Xem tất cả</a>
+    </div>
+    {% set recent = (history.parking_orders[:3] + history.charging_orders[:2]) %}
+    {% if recent %}
+      {% for tx in history.parking_orders[:5] %}
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
+          <div style="width:36px;height:36px;border-radius:10px;background:var(--bg-input);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">🅿️</div>
+          <div style="flex:1;">
+            <div style="font-size:13px;font-weight:600;">{{ tx.plate_number }} · {{ tx.slot_code }}</div>
+            <div style="font-size:11px;color:var(--text-muted);">{{ tx.time_start[:16] }}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:13px;font-weight:700;color:var(--success);">{{ '{:,.0f}'.format(tx.total_fee) }}đ</div>
+            <span class="badge {% if tx.status=='completed' %}badge-green{% elif tx.status=='active' %}badge-blue{% else %}badge-gray{% endif %}">
+              {{ tx.status }}
+            </span>
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="empty-state" style="padding:24px 0;">
+        <div class="empty-icon">📋</div>
+        <p>Chưa có giao dịch nào</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Quick actions -->
+<div class="card" style="margin-top:20px;">
+  <div class="card-title" style="margin-bottom:16px;">⚡ Thao tác nhanh</div>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;">
+    <a href="{{ url_for('user_park') }}" class="btn btn-primary">🅿️ Gửi xe mới</a>
+    <a href="{{ url_for('user_checkout') }}" class="btn btn-outline">🚪 Lấy xe</a>
+    <a href="{{ url_for('user_charge') }}" class="btn btn-outline" style="color:var(--electric);border-color:var(--electric);">⚡ Thuê sạc</a>
+    <a href="{{ url_for('user_vehicles') }}" class="btn btn-outline">🚗 Quản lý xe</a>
+    <a href="{{ url_for('user_history') }}" class="btn btn-outline">📋 Lịch sử</a>
+  </div>
+</div>
+{% endblock %}

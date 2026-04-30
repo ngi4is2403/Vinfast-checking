@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}Gửi xe — ParkEV{% endblock %}
+{% block page_title %}Gửi xe{% endblock %}
+{% block page_subtitle %}Chọn xe và vị trí đỗ{% endblock %}
+
+{% block content %}
+{% if not vehicles %}
+  <div class="empty-state">
+    <div class="empty-icon">🚗</div>
+    <p>Bạn chưa có phương tiện nào. Vui lòng thêm xe trước.</p>
+    <a href="{{ url_for('user_vehicles') }}" class="btn btn-primary mt-3">Thêm phương tiện</a>
+  </div>
+{% else %}
+<form method="POST" action="{{ url_for('user_park') }}" id="park-form">
+  <input type="hidden" name="slot_id" id="slot_id" value="">
+
+  <div class="grid-2" style="align-items:start;">
+    <!-- Left: Chọn xe -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">1️⃣ Chọn phương tiện</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Phương tiện</label>
+        <select name="vehicle_id" id="vehicle_id" class="form-control" required>
+          <option value="">-- Chọn xe --</option>
+          {% for v in vehicles %}
+            <option value="{{ v.id }}" data-vtype="{{ v.vehicle_type }}"
+              {% if selected_vid == v.id %}selected{% endif %}>
+              {{ v.plate_number }} — {{ vehicle_types.get(v.vehicle_type, v.vehicle_type) }}
+              {% if v.brand %} ({{ v.brand }} {{ v.model }}){% endif %}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Ghi chú (tùy chọn)</label>
+        <input name="notes" type="text" class="form-control" placeholder="Ví dụ: xe màu đỏ, cần chỗ rộng...">
+      </div>
+
+      <!-- Bảng giá -->
+      <div style="background:var(--bg-card2);border-radius:var(--radius-sm);padding:14px;margin-top:8px;">
+        <div style="font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px;">Bảng giá gửi xe</div>
+        <div style="display:grid;grid-template-columns:1fr auto auto;gap:6px;font-size:12.5px;align-items:center;">
+          <span>🏍️ Xe máy</span><span style="color:var(--text-muted);">5.000đ/h</span><span style="color:var(--text-muted);">tối đa 25k/ngày</span>
+          <span>🚗 Ô tô</span><span style="color:var(--text-muted);">20.000đ/h</span><span style="color:var(--text-muted);">tối đa 120k/ngày</span>
+          <span>⚡🏍️ Xe máy điện</span><span style="color:var(--electric);">8.000đ/h</span><span style="color:var(--text-muted);">tối đa 40k/ngày</span>
+          <span>⚡🚗 Ô tô điện</span><span style="color:var(--electric);">25.000đ/h</span><span style="color:var(--text-muted);">tối đa 150k/ngày</span>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-block mt-4"
+              onclick="return checkSlot()">✅ Xác nhận gửi xe</button>
+    </div>
+
+    <!-- Right: Chọn vị trí đỗ -->
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">2️⃣ Chọn vị trí đỗ</div>
+          <div class="card-subtitle">Chọn xe trước để lọc vị trí phù hợp</div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--text-muted);">
+          <span style="display:inline-block;width:10px;height:10px;background:var(--primary);border-radius:2px;"></span> Đang chọn
+          <span style="display:inline-block;width:10px;height:10px;background:var(--border);border-radius:2px;margin-left:6px;"></span> Trống
+        </div>
+      </div>
+
+      <div id="slots-container">
+        <!-- Khu A -->
+        {% set zone_a = slots | selectattr('zone','equalto','A') | list %}
+        {% set zone_b = slots | selectattr('zone','equalto','B') | list %}
+
+        {% if zone_a %}
+          <div class="zone-label">🅿️ Khu A — Không sạc</div>
+          <div class="slot-grid mb-4">
+            {% for s in zone_a %}
+              <div class="slot-card" data-slot-id="{{ s.id }}">
+                <div class="slot-zone">Khu A</div>
+                <div class="slot-code">{{ s.slot_code }}</div>
+                <div class="slot-type">{{ 'Xe máy' if s.slot_type=='small' else 'Ô tô' if s.slot_type=='large' else 'Tất cả' }}</div>
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        {% if zone_b %}
+          <div class="zone-label">⚡ Khu B — Có sạc</div>
+          <div class="slot-grid">
+            {% for s in zone_b %}
+              <div class="slot-card" data-slot-id="{{ s.id }}">
+                <div class="slot-zone">Khu B</div>
+                <div class="slot-code">{{ s.slot_code }}</div>
+                <div class="slot-type">{{ 'Xe máy' if s.slot_type=='small' else 'Ô tô' if s.slot_type=='large' else 'Tất cả' }}</div>
+                <div class="slot-charging">⚡ Gần trụ sạc</div>
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        {% if not slots %}
+          <div class="empty-state">
+            <div class="empty-icon">🅿️</div>
+            <p>Không có vị trí đỗ trống.</p>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</form>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function checkSlot() {
+  const slotId = document.getElementById('slot_id').value;
+  const vidEl  = document.getElementById('vehicle_id');
+  if (!vidEl || !vidEl.value) {
+    alert('Vui lòng chọn phương tiện.');
+    return false;
+  }
+  if (!slotId) {
+    alert('Vui lòng chọn vị trí đỗ xe.');
+    return false;
+  }
+  return true;
+}
+</script>
+{% endblock %}

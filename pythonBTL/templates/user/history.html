@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}Lịch sử — ParkEV{% endblock %}
+{% block page_title %}Lịch sử giao dịch{% endblock %}
+{% block page_subtitle %}Toàn bộ lịch sử gửi xe và sạc{% endblock %}
+
+{% block content %}
+<!-- Filter bar -->
+<div class="card" style="margin-bottom:20px;">
+  <form method="GET" action="{{ url_for('user_history') }}" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+    <div class="form-group" style="margin:0;min-width:120px;">
+      <label class="form-label">Tháng</label>
+      <select name="month" class="form-control">
+        <option value="">Tất cả</option>
+        {% for m in range(1,13) %}
+          <option value="{{ m }}" {% if filters.month==m %}selected{% endif %}>Tháng {{ m }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group" style="margin:0;min-width:100px;">
+      <label class="form-label">Năm</label>
+      <select name="year" class="form-control">
+        {% for y in [2024, 2025, 2026] %}
+          <option value="{{ y }}" {% if filters.year==y %}selected{% endif %}>{{ y }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group" style="margin:0;min-width:140px;">
+      <label class="form-label">Loại giao dịch</label>
+      <select name="type" class="form-control">
+        <option value="">Tất cả</option>
+        <option value="parking"  {% if filters.type=='parking' %}selected{% endif %}>Gửi xe</option>
+        <option value="charging" {% if filters.type=='charging' %}selected{% endif %}>Sạc xe</option>
+      </select>
+    </div>
+    <div class="form-group" style="margin:0;min-width:130px;">
+      <label class="form-label">Trạng thái</label>
+      <select name="status" class="form-control">
+        <option value="">Tất cả</option>
+        <option value="active"    {% if filters.status=='active' %}selected{% endif %}>Đang hoạt động</option>
+        <option value="completed" {% if filters.status=='completed' %}selected{% endif %}>Hoàn tất</option>
+      </select>
+    </div>
+    <button type="submit" class="btn btn-primary" style="margin-bottom:1px;">🔍 Lọc</button>
+    <a href="{{ url_for('user_history') }}" class="btn btn-outline" style="margin-bottom:1px;">Xóa lọc</a>
+  </form>
+</div>
+
+<!-- Summary -->
+<div class="stats-grid" style="margin-bottom:20px;">
+  <div class="stat-card">
+    <div class="stat-icon purple">🅿️</div>
+    <div>
+      <div class="stat-value">{{ '{:,.0f}'.format(history.total_parking) }}đ</div>
+      <div class="stat-label">Tổng phí gửi xe</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon violet">⚡</div>
+    <div>
+      <div class="stat-value">{{ '{:,.0f}'.format(history.total_charging) }}đ</div>
+      <div class="stat-label">Tổng phí sạc</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon green">💰</div>
+    <div>
+      <div class="stat-value">{{ '{:,.0f}'.format(history.total_spent) }}đ</div>
+      <div class="stat-label">Tổng chi tiêu</div>
+    </div>
+  </div>
+</div>
+
+<!-- Tabs -->
+<div class="tabs-wrapper">
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="tab-parking">🅿️ Gửi xe ({{ history.parking_orders|length }})</button>
+    <button class="tab-btn" data-tab="tab-charging">⚡ Sạc xe ({{ history.charging_orders|length }})</button>
+  </div>
+
+  <div id="tab-parking" class="tab-pane active">
+    {% if history.parking_orders %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Biển số</th>
+              <th>Vị trí</th>
+              <th>Thời gian vào</th>
+              <th>Thời gian ra</th>
+              <th>Phí</th>
+              <th>Trạng thái</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for o in history.parking_orders %}
+              <tr>
+                <td class="td-bold">{{ o.plate_number }}</td>
+                <td>{{ o.slot_code }} — Khu {{ o.zone }}</td>
+                <td style="color:var(--text-muted);font-size:12px;">{{ o.time_start }}</td>
+                <td style="color:var(--text-muted);font-size:12px;">{{ o.time_end or '—' }}</td>
+                <td class="td-bold" style="color:var(--success);">
+                  {{ '{:,.0f}'.format(o.total_fee) }}đ
+                </td>
+                <td>
+                  <span class="badge {% if o.status=='completed' %}badge-green{% elif o.status=='active' %}badge-blue{% else %}badge-gray{% endif %}">
+                    {{ 'Hoàn tất' if o.status=='completed' else 'Đang gửi' if o.status=='active' else o.status }}
+                  </span>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <div class="empty-icon">🅿️</div>
+        <p>Không có lịch sử gửi xe.</p>
+      </div>
+    {% endif %}
+  </div>
+
+  <div id="tab-charging" class="tab-pane">
+    {% if history.charging_orders %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Biển số</th>
+              <th>Trụ sạc</th>
+              <th>Loại sạc</th>
+              <th>Thời gian bắt đầu</th>
+              <th>kWh</th>
+              <th>Phí</th>
+              <th>Trạng thái</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for o in history.charging_orders %}
+              <tr>
+                <td class="td-bold">{{ o.plate_number }}</td>
+                <td>{{ o.station_code }}</td>
+                <td>
+                  <span class="badge {% if o.charge_type=='fast' %}badge-violet{% else %}badge-cyan{% endif %}">
+                    {{ 'Nhanh' if o.charge_type=='fast' else 'Chậm' }}
+                  </span>
+                </td>
+                <td style="color:var(--text-muted);font-size:12px;">{{ o.time_start }}</td>
+                <td>{{ o.kwh_consumed }} kWh</td>
+                <td class="td-bold" style="color:var(--electric);">
+                  {{ '{:,.0f}'.format(o.total_fee) }}đ
+                </td>
+                <td>
+                  <span class="badge {% if o.status=='completed' %}badge-green{% else %}badge-blue{% endif %}">
+                    {{ 'Hoàn tất' if o.status=='completed' else 'Đang sạc' }}
+                  </span>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <div class="empty-icon">⚡</div>
+        <p>Không có lịch sử sạc xe.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
