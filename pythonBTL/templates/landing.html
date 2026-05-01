@@ -42,17 +42,17 @@
     <div class="feature-card">
       <div class="feature-icon">⚡</div>
       <div class="feature-title">Sạc xe điện</div>
-      <div class="feature-desc">Hệ thống 6 trụ sạc gồm sạc chậm và sạc nhanh. Tự động tính phí dựa trên số kWh tiêu thụ.</div>
+      <div class="feature-desc">Hệ thống 6 trụ sạc. Tự động tính phí dựa trên thời gian sạc thực tế.</div>
     </div>
     <div class="feature-card">
       <div class="feature-icon">📊</div>
       <div class="feature-title">Báo cáo doanh thu</div>
-      <div class="feature-desc">Dashboard tổng giám đốc với biểu đồ doanh thu theo ngày, tỷ lệ lấp đầy, thống kê khách hàng.</div>
+      <div class="feature-desc">Dashboard admin với biểu đồ doanh thu, quản lý thu/chi, thống kê khách hàng.</div>
     </div>
     <div class="feature-card">
       <div class="feature-icon">🔐</div>
-      <div class="feature-title">Phân quyền 3 cấp</div>
-      <div class="feature-desc">User — Admin bãi đỗ — Tổng giám đốc. Mỗi vai trò có giao diện và quyền truy cập riêng biệt.</div>
+      <div class="feature-title">Phân quyền 2 cấp</div>
+      <div class="feature-desc">User — Admin bãi đỗ. Mỗi vai trò có giao diện và quyền truy cập riêng biệt.</div>
     </div>
     <div class="feature-card">
       <div class="feature-icon">🚗</div>
@@ -69,40 +69,29 @@
 
 <!-- ── Roles ── -->
 <section class="roles-section">
-  <div class="section-title" style="margin-bottom:8px;">3 Vai trò trong hệ thống</div>
+  <div class="section-title" style="margin-bottom:8px;">2 Vai trò trong hệ thống</div>
   <div class="section-sub" style="margin-bottom:40px;">Mỗi vai trò có giao diện và chức năng phù hợp</div>
-  <div class="roles-grid">
+  <div class="roles-grid" style="grid-template-columns:repeat(2,1fr);">
     <div class="role-card">
       <div class="role-badge">Khách hàng</div>
       <div class="role-title">👤 Người dùng</div>
       <ul class="role-features">
         <li>Đăng ký và đăng nhập</li>
         <li>Quản lý xe cá nhân</li>
-        <li>Gửi xe và lấy xe</li>
-        <li>Thuê trụ sạc xe điện</li>
+        <li>Gửi xe và lấy xe + sạc tích hợp</li>
+        <li>Ví tiền: nạp/rút/thanh toán tự động</li>
         <li>Xem lịch sử giao dịch</li>
       </ul>
     </div>
     <div class="role-card">
-      <div class="role-badge" style="background:rgba(34,211,238,.1);color:var(--secondary);">Admin bãi đỗ</div>
+      <div class="role-badge" style="background:rgba(34,211,238,.1);color:var(--secondary);">Quản lý</div>
       <div class="role-title">🛡️ Admin vận hành</div>
       <ul class="role-features">
         <li>Xem xe đang trong bãi</li>
         <li>Xác nhận xe vào / ra</li>
-        <li>Quản lý vị trí đỗ 20 slot</li>
-        <li>Quản lý 6 trụ sạc</li>
-        <li>Xử lý đơn sạc đang hoạt động</li>
-      </ul>
-    </div>
-    <div class="role-card">
-      <div class="role-badge" style="background:rgba(167,139,250,.1);color:var(--electric);">Tổng giám đốc</div>
-      <div class="role-title">📈 Tổng giám đốc</div>
-      <ul class="role-features">
-        <li>Báo cáo doanh thu tháng</li>
-        <li>Biểu đồ theo từng ngày</li>
-        <li>Thống kê khách hàng</li>
-        <li>Hiệu suất bãi đỗ</li>
-        <li>So sánh tháng trước</li>
+        <li>Quản lý vị trí đỗ & trụ sạc</li>
+        <li>Quản lý thu/chi & doanh thu</li>
+        <li>Báo cáo tổng hợp & khách hàng</li>
       </ul>
     </div>
   </div>
@@ -112,7 +101,7 @@
 <section style="padding:60px 48px;text-align:center;max-width:700px;margin:0 auto;">
   <div class="section-title" style="font-size:22px;margin-bottom:8px;">Tài khoản demo</div>
   <div class="section-sub" style="margin-bottom:28px;">Thử ngay với các tài khoản có sẵn</div>
-  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;">
+  <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;max-width:400px;margin:0 auto;">
     <div class="card" style="text-align:center;">
       <div style="font-size:24px;margin-bottom:8px;">👤</div>
       <div style="font-weight:700;margin-bottom:6px;">User</div>
@@ -122,11 +111,6 @@
       <div style="font-size:24px;margin-bottom:8px;">🛡️</div>
       <div style="font-weight:700;margin-bottom:6px;">Admin</div>
       <div style="font-size:12px;color:var(--text-muted);">admin@demo.com<br>123456</div>
-    </div>
-    <div class="card" style="text-align:center;">
-      <div style="font-size:24px;margin-bottom:8px;">📊</div>
-      <div style="font-weight:700;margin-bottom:6px;">Giám đốc</div>
-      <div style="font-size:12px;color:var(--text-muted);">director@demo.com<br>123456</div>
     </div>
   </div>
   <div style="margin-top:28px;">

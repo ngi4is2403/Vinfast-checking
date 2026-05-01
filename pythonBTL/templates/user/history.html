@@ -19,7 +19,8 @@
     <div class="form-group" style="margin:0;min-width:100px;">
       <label class="form-label">Năm</label>
       <select name="year" class="form-control">
-        {% for y in [2024, 2025, 2026] %}
+        <option value="">Tất cả</option>
+        {% for y in [2024, 2025, 2026, 2027] %}
           <option value="{{ y }}" {% if filters.year==y %}selected{% endif %}>{{ y }}</option>
         {% endfor %}
       </select>
@@ -127,9 +128,8 @@
             <tr>
               <th>Biển số</th>
               <th>Trụ sạc</th>
-              <th>Loại sạc</th>
               <th>Thời gian bắt đầu</th>
-              <th>kWh</th>
+              <th>Thời gian kết thúc</th>
               <th>Phí</th>
               <th>Trạng thái</th>
             </tr>
@@ -139,13 +139,8 @@
               <tr>
                 <td class="td-bold">{{ o.plate_number }}</td>
                 <td>{{ o.station_code }}</td>
-                <td>
-                  <span class="badge {% if o.charge_type=='fast' %}badge-violet{% else %}badge-cyan{% endif %}">
-                    {{ 'Nhanh' if o.charge_type=='fast' else 'Chậm' }}
-                  </span>
-                </td>
                 <td style="color:var(--text-muted);font-size:12px;">{{ o.time_start }}</td>
-                <td>{{ o.kwh_consumed }} kWh</td>
+                <td style="color:var(--text-muted);font-size:12px;">{{ o.time_end or '—' }}</td>
                 <td class="td-bold" style="color:var(--electric);">
                   {{ '{:,.0f}'.format(o.total_fee) }}đ
                 </td>

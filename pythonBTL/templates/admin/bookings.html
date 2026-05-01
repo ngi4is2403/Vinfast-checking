@@ -1,0 +1,335 @@
+{% extends "base.html" %}
+{% block title %}Quản lý Đặt lịch — ParkEV Admin{% endblock %}
+{% block page_title %}📅 Quản lý đặt lịch{% endblock %}
+{% block page_subtitle %}Xem và xử lý các đơn đặt lịch của khách hàng{% endblock %}
+
+{% block content %}
+<style>
+.badge-status {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 10px; border-radius: 20px; font-size: 11.5px; font-weight: 600;
+}
+.badge-pending  { background: rgba(245,158,11,.15); color: #f59e0b; }
+.badge-active   { background: rgba(16,185,129,.15);  color: #10b981; }
+.badge-completed{ background: rgba(99,102,241,.15);  color: #818cf8; }
+.badge-no_show  { background: rgba(239,68,68,.15);   color: #ef4444; }
+.badge-cancelled{ background: rgba(107,114,128,.15); color: #9ca3af; }
+
+.filter-bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 20px; }
+.filter-bar a, .filter-btn {
+  padding: 6px 14px; border-radius: 8px; font-size: 13px; font-weight: 600;
+  background: var(--bg-card2); color: var(--text-muted);
+  text-decoration: none; border: 1px solid var(--border);
+  transition: all .2s; cursor: pointer;
+}
+.filter-bar a.active, .filter-btn.active {
+  background: var(--primary); color: #fff; border-color: var(--primary);
+}
+.filter-bar a:hover { color: var(--text); }
+
+.modal-overlay-admin {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.5); backdrop-filter: blur(8px);
+  align-items: center; justify-content: center; z-index: 9999;
+}
+.modal-overlay-admin.open { display: flex; }
+.modal-box-admin {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 20px; padding: 28px; width: 90%; max-width: 420px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.3);
+  animation: modalIn .3s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes modalIn { from{transform:scale(.9);opacity:0} to{transform:scale(1);opacity:1} }
+.modal-box-admin h3 { margin: 0 0 8px; font-size: 18px; }
+.modal-box-admin p  { margin: 0 0 18px; color: var(--text-muted); font-size: 14px; line-height: 1.5; }
+
+.refund-options { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; margin-bottom: 16px; }
+.refund-opt {
+  text-align: center; padding: 10px 6px; border-radius: 10px;
+  border: 2px solid var(--border); cursor: pointer; transition: all .15s;
+  font-weight: 700; font-size: 14px; color: var(--text-muted);
+}
+.refund-opt:hover, .refund-opt.selected { border-color: var(--primary); color: var(--primary); background: rgba(99,102,241,.1); }
+.refund-opt small { display: block; font-size: 10px; font-weight: 400; margin-top: 2px; color: var(--text-muted); }
+
+.admin-tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.admin-tbl th { background: var(--bg-card2); padding: 10px 12px; text-align: left;
+  font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--text-muted);
+  border-bottom: 2px solid var(--border); }
+.admin-tbl td { padding: 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.admin-tbl tr:last-child td { border-bottom: none; }
+.admin-tbl tr:hover td { background: var(--bg-card2); }
+
+.countdown-sm {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 12px;
+  background: rgba(239,68,68,.15); color: #ef4444;
+  font-size: 11px; font-weight: 700;
+}
+
+.overdue-row td { background: rgba(239,68,68,.04) !important; }
+
+/* Stats */
+.stat-row { display: grid; grid-template-columns: repeat(5,1fr); gap: 12px; margin-bottom: 20px; }
+@media(max-width:900px){ .stat-row { grid-template-columns: repeat(3,1fr); } }
+.stat-mini { background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 14px 16px; text-align: center; }
+.stat-mini .sm-num { font-size: 22px; font-weight: 700; }
+.stat-mini .sm-lbl { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+</style>
+
+{# ── Stats ── #}
+{% set pending_bk   = bookings | selectattr('status','equalto','pending')   | list %}
+{% set active_bk    = bookings | selectattr('status','equalto','active')    | list %}
+{% set noshow_bk    = bookings | selectattr('status','equalto','no_show')   | list %}
+{% set completed_bk = bookings | selectattr('status','equalto','completed') | list %}
+{% set cancelled_bk = bookings | selectattr('status','equalto','cancelled') | list %}
+
+<div class="stat-row">
+  <div class="stat-mini">
+    <div class="sm-num" style="color:#f59e0b;">{{ pending_bk|length }}</div>
+    <div class="sm-lbl">⏳ Chờ check-in</div>
+  </div>
+  <div class="stat-mini">
+    <div class="sm-num" style="color:#10b981;">{{ active_bk|length }}</div>
+    <div class="sm-lbl">✅ Đang hoạt động</div>
+  </div>
+  <div class="stat-mini">
+    <div class="sm-num" style="color:#818cf8;">{{ completed_bk|length }}</div>
+    <div class="sm-lbl">🏁 Hoàn tất</div>
+  </div>
+  <div class="stat-mini">
+    <div class="sm-num" style="color:#ef4444;">{{ noshow_bk|length }}</div>
+    <div class="sm-lbl">❌ No-show</div>
+  </div>
+  <div class="stat-mini">
+    <div class="sm-num" style="color:#9ca3af;">{{ cancelled_bk|length }}</div>
+    <div class="sm-lbl">🚫 Đã huỷ</div>
+  </div>
+</div>
+
+{# ── Filter bar ── #}
+<div class="filter-bar">
+  <form method="GET" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+    <input name="search" type="text" class="form-control" style="width:200px;padding:6px 12px;"
+           placeholder="🔍 Tìm biển số..." value="{{ search }}">
+    <button type="submit" class="btn btn-sm btn-primary">Tìm</button>
+    {% if search %}<a href="{{ url_for('admin_bookings') }}" class="btn btn-sm btn-outline">✕ Xoá lọc</a>{% endif %}
+  </form>
+  <a href="{{ url_for('admin_bookings') }}"
+     class="{{ 'active' if not status_f else '' }}">Tất cả</a>
+  <a href="?status=pending"
+     class="{{ 'active' if status_f=='pending' else '' }}">⏳ Pending</a>
+  <a href="?status=active"
+     class="{{ 'active' if status_f=='active' else '' }}">✅ Active</a>
+  <a href="?status=no_show"
+     class="{{ 'active' if status_f=='no_show' else '' }}">❌ No-show</a>
+  <a href="?status=completed"
+     class="{{ 'active' if status_f=='completed' else '' }}">🏁 Completed</a>
+  <a href="?status=cancelled"
+     class="{{ 'active' if status_f=='cancelled' else '' }}">🚫 Cancelled</a>
+</div>
+
+{# ── Table ── #}
+<div class="card" style="padding:0;overflow:hidden;">
+  {% if not bookings %}
+    <div class="empty-state" style="padding:40px;">
+      <div class="empty-icon">📅</div>
+      <p>Không có đặt lịch nào.</p>
+    </div>
+  {% else %}
+  <div style="overflow-x:auto;">
+  <table class="admin-tbl">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Khách hàng</th>
+        <th>Xe</th>
+        <th>Vị trí</th>
+        <th>Giờ hẹn</th>
+        <th>Thuê</th>
+        <th>Phí</th>
+        <th>Trạng thái</th>
+        <th>Thao tác</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for b in bookings %}
+      <tr class="{{ 'overdue-row' if b.status=='pending' and b.is_overdue else '' }}"
+          id="brow-{{ b.id }}">
+        <td style="font-weight:700;color:var(--text-muted);">#{{ b.id }}</td>
+        <td>
+          <div style="font-weight:600;">{{ b.owner_name }}</div>
+          <div style="font-size:12px;color:var(--text-muted);">{{ b.owner_phone }}</div>
+        </td>
+        <td>
+          <div style="font-weight:700;">{{ b.plate_number }}</div>
+          <div style="font-size:12px;color:var(--text-muted);">
+            {{ vehicle_types.get(b.vehicle_type, b.vehicle_type) }}
+            {% if b.brand %} · {{ b.brand }}{% endif %}
+          </div>
+        </td>
+        <td>
+          <span style="background:rgba(99,102,241,.1);color:var(--primary);
+                        padding:2px 8px;border-radius:6px;font-weight:700;font-size:12px;">
+            {{ b.slot_code }}
+          </span>
+          {% if b.has_charging %}<span style="color:#a78bfa;font-size:11px;"> ⚡</span>{% endif %}
+        </td>
+        <td>
+          <div style="font-weight:600;">{{ b.scheduled_time[:16] }}</div>
+        </td>
+        <td>
+          {{ b.duration_hours | int if b.duration_hours == b.duration_hours | int else b.duration_hours }}h
+        </td>
+        <td>
+          <div style="font-weight:700;color:var(--primary);">{{ '{:,.0f}'.format(b.total_fee) }}đ</div>
+          {% if b.penalty_fee > 0 %}
+            <div style="font-size:11px;color:#ef4444;">Phạt: {{ '{:,.0f}'.format(b.penalty_fee) }}đ</div>
+          {% endif %}
+          {% if b.refund_fee > 0 %}
+            <div style="font-size:11px;color:#10b981;">Hoàn: {{ '{:,.0f}'.format(b.refund_fee) }}đ</div>
+          {% endif %}
+        </td>
+        <td>
+          <span class="badge-status badge-{{ b.status }}">
+            {% if b.status == 'pending' %}⏳ Chờ check-in
+            {% elif b.status == 'active' %}✅ Đang đỗ
+            {% elif b.status == 'completed' %}🏁 Hoàn tất
+            {% elif b.status == 'no_show' %}❌ No-show
+            {% elif b.status == 'cancelled' %}🚫 Đã huỷ
+            {% endif %}
+          </span>
+        </td>
+        <td>
+          {% if b.status == 'pending' %}
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            {# Check-in thay user #}
+            <form method="POST" action="{{ url_for('admin_do_checkin_booking', bid=b.id) }}"
+                  data-confirm-form="Check-in thay cho khách {{ b.owner_name }} (xe {{ b.plate_number }})?">
+              <button type="submit" class="btn btn-sm btn-primary"
+                      title="Check-in thay user">✅ Check-in</button>
+            </form>
+            {# Huỷ + chọn % hoàn #}
+            <button class="btn btn-sm btn-danger" type="button"
+                    onclick="openCancelModal({{ b.id }}, '{{ b.owner_name }}', {{ b.total_fee }})">
+              🚫 Huỷ
+            </button>
+          </div>
+          {% else %}
+            <span style="font-size:12px;color:var(--text-muted);">—</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</div>
+
+{# ── Modal huỷ + chọn % hoàn ── #}
+<div class="modal-overlay-admin" id="cancelModal">
+  <div class="modal-box-admin">
+    <div style="font-size:32px;text-align:center;margin-bottom:12px;">🚫</div>
+    <h3 style="text-align:center;">Huỷ đặt lịch</h3>
+    <p style="text-align:center;">
+      Khách: <strong id="cancel-name"></strong><br>
+      Phí đã trả: <strong id="cancel-fee" style="color:var(--primary);"></strong>
+    </p>
+
+    <form method="POST" id="cancel-form" action="">
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px;">Chọn % hoàn tiền cho khách:</div>
+      <div class="refund-options">
+        <div class="refund-opt selected" onclick="selectRefund(this, 100)">
+          100%<small>Hoàn đủ</small>
+        </div>
+        <div class="refund-opt" onclick="selectRefund(this, 70)">
+          70%<small>Phạt 30%</small>
+        </div>
+        <div class="refund-opt" onclick="selectRefund(this, 50)">
+          50%<small>Phạt 50%</small>
+        </div>
+        <div class="refund-opt" onclick="selectRefund(this, 0)">
+          0%<small>Không hoàn</small>
+        </div>
+      </div>
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;text-align:center;">
+        Hoàn lại: <strong id="refund-preview" style="color:#10b981;">—</strong>
+      </div>
+      <input type="hidden" name="refund_percent" id="refund_percent_input" value="100">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <button type="button" class="btn btn-outline" onclick="closeCancelModal()">Huỷ bỏ</button>
+        <button type="submit" class="btn btn-danger">Xác nhận huỷ</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Countdown timers ──────────────────────────────────────────────────
+function updateAdminCountdowns() {
+  document.querySelectorAll('[id^="cdadm-"]').forEach(el => {
+    const deadline = new Date(el.dataset.deadline.replace(' ', 'T'));
+    const remain   = Math.max(0, Math.floor((deadline - new Date()) / 1000));
+    const mins     = Math.floor(remain / 60);
+    const secs     = remain % 60;
+    const span     = el.querySelector('span');
+    if (span) {
+        span.textContent = `${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
+    }
+    if (remain === 0) {
+      el.style.background = 'rgba(239,68,68,.3)';
+      // Tô đỏ cả row
+      const row = el.closest('tr');
+      if (row) row.classList.add('overdue-row');
+    }
+  });
+}
+setInterval(updateAdminCountdowns, 1000);
+updateAdminCountdowns();
+
+// ── Cancel modal ──────────────────────────────────────────────────────
+let currentTotalFee = 0;
+let currentRefundPct = 100;
+
+function openCancelModal(bookingId, ownerName, totalFee) {
+  currentTotalFee  = totalFee;
+  currentRefundPct = 100;
+  document.getElementById('cancel-name').textContent = ownerName;
+  document.getElementById('cancel-fee').textContent  = totalFee.toLocaleString('vi-VN') + 'đ';
+  document.getElementById('cancel-form').action      = `/admin/bookings/cancel/${bookingId}`;
+  updateRefundPreview();
+  // Reset selection
+  document.querySelectorAll('.refund-opt').forEach(o => o.classList.remove('selected'));
+  document.querySelector('.refund-opt').classList.add('selected');
+  document.getElementById('cancelModal').classList.add('open');
+}
+
+function closeCancelModal() {
+  document.getElementById('cancelModal').classList.remove('open');
+}
+
+function selectRefund(el, pct) {
+  document.querySelectorAll('.refund-opt').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+  currentRefundPct = pct;
+  document.getElementById('refund_percent_input').value = pct;
+  updateRefundPreview();
+}
+
+function updateRefundPreview() {
+  const refund = Math.round(currentTotalFee * currentRefundPct / 100);
+  document.getElementById('refund-preview').textContent =
+    refund.toLocaleString('vi-VN') + 'đ (' + currentRefundPct + '%)';
+}
+
+// Click outside to close
+document.getElementById('cancelModal').addEventListener('click', function(e) {
+  if (e.target === this) closeCancelModal();
+});
+</script>
+{% endblock %}

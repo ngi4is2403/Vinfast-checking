@@ -13,6 +13,7 @@
 {% else %}
 <form method="POST" action="{{ url_for('user_park') }}" id="park-form">
   <input type="hidden" name="slot_id" id="slot_id" value="">
+  <input type="hidden" name="want_charging" id="want_charging" value="0">
 
   <div class="grid-2" style="align-items:start;">
     <!-- Left: Chọn xe -->
@@ -38,8 +39,26 @@
         <input name="notes" type="text" class="form-control" placeholder="Ví dụ: xe màu đỏ, cần chỗ rộng...">
       </div>
 
+      <!-- Tùy chọn sạc xe (hiện khi chọn slot Khu B) -->
+      <div id="charging-option" style="display:none;margin-top:12px;">
+        <div style="background:linear-gradient(135deg, rgba(167,139,250,.08), rgba(99,102,241,.08));
+                    border:1px solid rgba(167,139,250,.3);border-radius:var(--radius-sm);padding:16px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;">
+              <input type="checkbox" id="charge-checkbox" style="width:18px;height:18px;accent-color:var(--electric);cursor:pointer;">
+              <span style="font-size:15px;">⚡ Sạc xe tại bãi</span>
+            </label>
+          </div>
+          <div style="font-size:13px;color:var(--text-muted);line-height:1.6;">
+            Vị trí bạn chọn có trụ sạc gần đó.<br>
+            Giá sạc: <strong style="color:var(--electric);">{{ '{:,.0f}'.format(charging_rate | default(0)) }}đ/giờ</strong><br>
+            <span style="font-size:12px;">Phí sạc sẽ được tính tự động theo thời gian và trừ từ ví khi lấy xe.</span>
+          </div>
+        </div>
+      </div>
+
       <!-- Bảng giá -->
-      <div style="background:var(--bg-card2);border-radius:var(--radius-sm);padding:14px;margin-top:8px;">
+      <div style="background:var(--bg-card2);border-radius:var(--radius-sm);padding:14px;margin-top:12px;">
         <div style="font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px;">Bảng giá gửi xe</div>
         <div style="display:grid;grid-template-columns:1fr auto auto;gap:6px;font-size:12.5px;align-items:center;">
           <span>🏍️ Xe máy</span><span style="color:var(--text-muted);">5.000đ/h</span><span style="color:var(--text-muted);">tối đa 25k/ngày</span>
@@ -75,7 +94,7 @@
           <div class="zone-label">🅿️ Khu A — Không sạc</div>
           <div class="slot-grid mb-4">
             {% for s in zone_a %}
-              <div class="slot-card" data-slot-id="{{ s.id }}">
+              <div class="slot-card" data-slot-id="{{ s.id }}" data-has-charging="0">
                 <div class="slot-zone">Khu A</div>
                 <div class="slot-code">{{ s.slot_code }}</div>
                 <div class="slot-type">{{ 'Xe máy' if s.slot_type=='small' else 'Ô tô' if s.slot_type=='large' else 'Tất cả' }}</div>
@@ -88,7 +107,7 @@
           <div class="zone-label">⚡ Khu B — Có sạc</div>
           <div class="slot-grid">
             {% for s in zone_b %}
-              <div class="slot-card" data-slot-id="{{ s.id }}">
+              <div class="slot-card" data-slot-id="{{ s.id }}" data-has-charging="1">
                 <div class="slot-zone">Khu B</div>
                 <div class="slot-code">{{ s.slot_code }}</div>
                 <div class="slot-type">{{ 'Xe máy' if s.slot_type=='small' else 'Ô tô' if s.slot_type=='large' else 'Tất cả' }}</div>
@@ -124,7 +143,44 @@ function checkSlot() {
     alert('Vui lòng chọn vị trí đỗ xe.');
     return false;
   }
+  // Sync checkbox to hidden field
+  const cb = document.getElementById('charge-checkbox');
+  document.getElementById('want_charging').value = (cb && cb.checked) ? '1' : '0';
   return true;
 }
+
+// Hiện/ẩn tùy chọn sạc khi chọn slot
+function updateChargingOption() {
+  const slotId = document.getElementById('slot_id').value;
+  const chargingOpt = document.getElementById('charging-option');
+  if (!chargingOpt) return;
+
+  // Tìm slot card đang selected
+  const selected = document.querySelector('.slot-card.selected');
+  if (selected && selected.dataset.hasCharging === '1') {
+    chargingOpt.style.display = 'block';
+  } else {
+    chargingOpt.style.display = 'none';
+    const cb = document.getElementById('charge-checkbox');
+    if (cb) cb.checked = false;
+  }
+}
+
+// Override slot click handler to also update charging option
+  if (origSlotInput) origSlotInput.value = card.dataset.slotId;
+  updateChargingOption();
+});
+
+// Auto-select slot if passed from URL/Server
+window.onload = function() {
+  const selSid = "{{ selected_sid or '' }}";
+  if (selSid) {
+    const card = document.querySelector(`.slot-card[data-slot-id="${selSid}"]`);
+    if (card) {
+      card.click();
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+};
 </script>
 {% endblock %}

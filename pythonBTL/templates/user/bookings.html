@@ -1,0 +1,451 @@
+{% extends "base.html" %}
+{% block title %}Đặt lịch — ParkEV{% endblock %}
+{% block page_title %}📅 Đặt lịch trước{% endblock %}
+{% block page_subtitle %}Đặt chỗ, thanh toán ngay — đến sớm hoặc đúng giờ đều được{% endblock %}
+
+{% block content %}
+<style>
+.tab-bar { display:flex; gap:8px; margin-bottom:20px; }
+.tab-btn {
+  padding:8px 20px; border-radius:10px; font-weight:700; font-size:14px; cursor:pointer;
+  border:1px solid var(--border); background:var(--bg-card2); color:var(--text-muted);
+  transition:all .2s;
+}
+.tab-btn.active { background:var(--primary); color:#fff; border-color:var(--primary); }
+.tab-pane { display:none; } .tab-pane.active { display:block; }
+
+/* Slot grid */
+.slot-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(88px,1fr)); gap:10px; }
+.slot-card {
+  border:2px solid var(--border); border-radius:12px; padding:10px 6px; text-align:center;
+  cursor:pointer; transition:all .18s; background:var(--bg-card2);
+}
+.slot-card:hover  { border-color:var(--primary); transform:translateY(-2px); }
+.slot-card.selected { border-color:var(--primary); background:rgba(99,102,241,.12); }
+.slot-code { font-size:16px; font-weight:800; color:var(--text); }
+.slot-type { font-size:11px; color:var(--text-muted); margin-top:2px; }
+.slot-charging { font-size:10px; color:#a78bfa; margin-top:2px; }
+.zone-label { font-size:12px;font-weight:700;color:var(--text-muted);
+              text-transform:uppercase;letter-spacing:.8px;margin:14px 0 8px; }
+
+/* Pricing box */
+.price-box {
+  background:linear-gradient(135deg,rgba(99,102,241,.08),rgba(167,139,250,.05));
+  border:1px solid rgba(99,102,241,.25); border-radius:12px; padding:14px;
+}
+.price-row { display:flex; justify-content:space-between; font-size:13.5px; margin-bottom:5px; }
+.price-total { font-size:18px; font-weight:800; color:var(--primary);
+               border-top:1px solid var(--border); padding-top:10px; margin-top:6px; }
+
+/* Warning box */
+.warn-box {
+  background:rgba(245,158,11,.08); border:1px solid rgba(245,158,11,.3);
+  border-radius:12px; padding:14px 16px; font-size:13px; margin-top:12px;
+}
+.warn-box li { margin-bottom:5px; line-height:1.5; }
+
+/* Booking card */
+.bk-card {
+  background:var(--bg-card); border:1px solid var(--border);
+  border-radius:var(--radius-sm); padding:18px; margin-bottom:14px;
+}
+.bk-header { display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px; }
+.bk-plate  { font-size:18px; font-weight:800; }
+.bk-meta   { font-size:12px; color:var(--text-muted); margin-top:3px; }
+.bk-details{ display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:10px; margin:14px 0; }
+.bk-ditem  { font-size:13px; }
+.bk-dlabel { color:var(--text-muted); font-size:11px; text-transform:uppercase; letter-spacing:.4px; margin-bottom:2px; }
+.bk-dvalue { font-weight:600; }
+.bk-actions{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; padding-top:12px;
+             border-top:1px solid var(--border); }
+
+/* Badge */
+.badge { display:inline-flex; align-items:center; gap:4px;
+         padding:3px 10px; border-radius:20px; font-size:12px; font-weight:700; }
+.badge-pending  { background:rgba(245,158,11,.15); color:#f59e0b; }
+.badge-active   { background:rgba(16,185,129,.15);  color:#10b981; }
+.badge-completed{ background:rgba(99,102,241,.15);  color:#818cf8; }
+.badge-no_show  { background:rgba(239,68,68,.15);   color:#ef4444; }
+.badge-cancelled{ background:rgba(107,114,128,.15); color:#9ca3af; }
+
+/* Countdown pill */
+.cd-pill {
+  display:inline-flex; align-items:center; gap:5px;
+  padding:4px 10px; border-radius:12px; font-size:12px; font-weight:700;
+  margin-top:5px;
+}
+.cd-pill.before   { background:rgba(99,102,241,.15); color:var(--primary); }
+.cd-pill.in-window{ background:rgba(16,185,129,.15); color:#10b981; }
+.cd-pill.expired  { background:rgba(239,68,68,.15);  color:#ef4444; }
+</style>
+
+{# ── Tab bar ── #}
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="switchTab('tab-book',this)" id="btn-book">
+    📅 Đặt lịch mới
+  </button>
+  <button class="tab-btn" onclick="switchTab('tab-list',this)" id="btn-list">
+    🗂 Lịch của tôi
+    {% if bookings %}<span style="background:var(--primary);color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;">{{ bookings|length }}</span>{% endif %}
+  </button>
+</div>
+
+{# ════════════════ TAB 1: FORM ĐẶT LỊCH ════════════════ #}
+<div class="tab-pane active" id="tab-book">
+  {% if not vehicles %}
+    <div class="empty-state"><div class="empty-icon">🚗</div>
+      <p>Bạn chưa đăng ký xe. <a href="{{ url_for('user_vehicles') }}">Thêm xe ngay</a></p>
+    </div>
+  {% else %}
+  <form id="booking-form" method="POST" action="{{ url_for('user_bookings') }}">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;">
+
+      {# ── Cột trái: Thông tin ── #}
+      <div>
+        <div class="card">
+          <h3 style="margin:0 0 16px;font-size:16px;">🚗 Chọn xe & thời gian</h3>
+
+          <div class="form-group">
+            <label class="form-label">Phương tiện</label>
+            <select class="form-control" name="vehicle_id" id="veh_select" onchange="onVehicleChange(this)">
+              <option value="">-- Chọn xe --</option>
+              {% for v in vehicles %}
+              <option value="{{ v.id }}" data-type="{{ v.vehicle_type }}">
+                {{ v.plate_number }} — {{ v.brand }} {{ v.model }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">⏰ Giờ hẹn đến</label>
+            <input type="datetime-local" class="form-control" name="scheduled_time"
+                   id="scheduled_time" onchange="calcFee()">
+            <small style="color:var(--text-muted);">Có thể đến sớm hơn, phần sớm tính thêm phí khi lấy xe.</small>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">⏱ Thời gian thuê</label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+              {% for h in [1,2,3,4,6,8,12,24] %}
+              <button type="button" class="btn btn-sm btn-outline" onclick="setHours({{ h }})">{{ h }}h</button>
+              {% endfor %}
+            </div>
+            <input type="number" class="form-control" name="duration_hours" id="duration_hours"
+                   value="2" min="1" max="72" step="0.5" onchange="calcFee()" style="width:120px;">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">📝 Ghi chú (tùy chọn)</label>
+            <input type="text" class="form-control" name="notes" placeholder="VD: Xe có vali to...">
+          </div>
+
+          {# Preview phí #}
+          <div class="price-box" id="price-box" style="display:none;">
+            <div class="price-row"><span>Đơn giá</span><span id="p-rate">—</span></div>
+            <div class="price-row"><span>Thời gian</span><span id="p-hours">—</span></div>
+            <div class="price-row price-total">
+              <span>💰 Tổng thanh toán</span><span id="p-total">—</span>
+            </div>
+          </div>
+
+          <div class="warn-box" style="margin-top:12px;">
+            <strong>⚠️ Quy định huỷ:</strong>
+            <ul style="margin:6px 0 0 16px;padding:0;">
+              <li>Huỷ <strong>trước giờ hẹn</strong> → phạt <strong>30%</strong></li>
+              <li>Huỷ <strong>sau giờ hẹn</strong> (trong khung giờ) → phạt <strong>50%</strong></li>
+              <li>Hết khung giờ mà không check-in → <strong>mất toàn bộ</strong></li>
+            </ul>
+          </div>
+        </div>
+
+        <input type="hidden" name="slot_id" id="slot_id_input" value="">
+        <button type="button" class="btn btn-primary" style="width:100%;margin-top:14px;"
+                onclick="submitBooking()">
+          📅 Xác nhận đặt lịch & Thanh toán
+        </button>
+      </div>
+
+      {# ── Cột phải: Chọn slot ── #}
+      <div class="card">
+        <h3 style="margin:0 0 4px;font-size:16px;">🅿️ Chọn vị trí đỗ</h3>
+        <p style="font-size:13px;color:var(--text-muted);margin:0 0 14px;">Chọn xe trước để lọc vị trí phù hợp</p>
+        <div id="slot-container">
+          {% if slots %}
+            {% set zone_a = slots | selectattr('zone','equalto','A') | list %}
+            {% set zone_b = slots | selectattr('zone','equalto','B') | list %}
+            {% if zone_a %}
+            <div class="zone-label">🅿️ Khu A — Thông thường</div>
+            <div class="slot-grid">
+              {% for s in zone_a %}
+              <div class="slot-card" data-id="{{ s.id }}" data-type="{{ s.slot_type }}"
+                   onclick="selectSlot(this, {{ s.id }})">
+                <div class="slot-code">{{ s.slot_code }}</div>
+                <div class="slot-type">{{ 'Xe máy' if s.slot_type=='small' else 'Ô tô' }}</div>
+              </div>
+              {% endfor %}
+            </div>
+            {% endif %}
+            {% if zone_b %}
+            <div class="zone-label">⚡ Khu B — Có sạc</div>
+            <div class="slot-grid">
+              {% for s in zone_b %}
+              <div class="slot-card" data-id="{{ s.id }}" data-type="{{ s.slot_type }}"
+                   onclick="selectSlot(this, {{ s.id }})">
+                <div class="slot-code">{{ s.slot_code }}</div>
+                <div class="slot-type">{{ 'Xe máy' if s.slot_type=='small' else 'Ô tô' }}</div>
+                <div class="slot-charging">⚡ Sạc điện</div>
+              </div>
+              {% endfor %}
+            </div>
+            {% endif %}
+          {% else %}
+            <div class="empty-state"><div class="empty-icon">🅿️</div><p>Không có vị trí trống.</p></div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </form>
+  {% endif %}
+</div>
+
+{# ════════════════ TAB 2: DANH SÁCH BOOKING ════════════════ #}
+<div class="tab-pane" id="tab-list">
+  {% if not bookings %}
+    <div class="empty-state"><div class="empty-icon">📅</div><p>Bạn chưa có đặt lịch nào.</p></div>
+  {% else %}
+  {% for b in bookings %}
+  <div class="bk-card">
+    <div class="bk-header">
+      <div>
+        <div class="bk-plate">🚗 {{ b.plate_number }}
+          {% if b.brand %}<span style="font-size:14px;font-weight:400;color:var(--text-muted);">({{ b.brand }} {{ b.model }})</span>{% endif %}
+        </div>
+        <div class="bk-meta">Đặt lúc {{ b.created_at[:16] }} &bull; {{ vehicle_types.get(b.vehicle_type, b.vehicle_type) }}</div>
+      </div>
+      <div style="text-align:right;">
+        {# Badge trạng thái #}
+        <span class="badge badge-{{ b.status }}">
+          {% if b.status == 'pending' %}
+            {% if b.has_early_order %}🚗 Đang đỗ sớm — chờ giờ hẹn
+            {% elif b.is_before_scheduled %}📅 Chờ đến giờ hẹn
+            {% elif b.is_in_window %}🟢 Trong khung giờ — Check-in ngay!
+            {% else %}⏰ Hết khung giờ{% endif %}
+          {% elif b.status == 'active' %}✅ Đang đỗ (đã check-in)
+          {% elif b.status == 'completed' %}🏁 Hoàn tất
+          {% elif b.status == 'no_show' %}❌ No-show (mất phí)
+          {% elif b.status == 'cancelled' %}🚫 Đã huỷ
+          {% endif %}
+        </span>
+        {# Countdown #}
+        {% if b.status == 'pending' %}
+          {% if b.has_early_order %}
+          {# Đang đỗ sớm: đếm ngược đến giờ hẹn, thông báo tự động activate #}
+          <div class="cd-pill before" id="cd{{ b.id }}"
+               data-target="{{ b.scheduled_time }}" data-mode="before">
+            ⏳ <span class="cd-val">--:--</span> nữa vào lịch đăng ký
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">
+            🔁 Đến giờ hẹn sẽ tự chuyển sang booking, phần sớm tính thêm
+          </div>
+          {% elif b.is_before_scheduled %}
+          <div class="cd-pill before" id="cd{{ b.id }}"
+               data-target="{{ b.scheduled_time }}" data-mode="before">
+            📅 <span class="cd-val">--:--</span> đến giờ hẹn
+          </div>
+          {% elif b.is_in_window %}
+          <div class="cd-pill in-window" id="cd{{ b.id }}"
+               data-target="{{ b.expire_at }}" data-mode="window">
+            ⏱ <span class="cd-val">--:--</span> còn lại
+          </div>
+          {% else %}
+          <div class="cd-pill expired">⏰ Đã hết giờ</div>
+          {% endif %}
+        {% endif %}
+      </div>
+
+
+    </div>
+
+    <div class="bk-details">
+      <div class="bk-ditem">
+        <div class="bk-dlabel">Vị trí</div>
+        <div class="bk-dvalue">🅿️ {{ b.slot_code }}</div>
+      </div>
+      <div class="bk-ditem">
+        <div class="bk-dlabel">Giờ hẹn</div>
+        <div class="bk-dvalue">{{ b.scheduled_time[:16] }}</div>
+      </div>
+      <div class="bk-ditem">
+        <div class="bk-dlabel">Hết khung giờ</div>
+        <div class="bk-dvalue">{{ b.expire_at[:16] }}</div>
+      </div>
+      <div class="bk-ditem">
+        <div class="bk-dlabel">Thuê</div>
+        <div class="bk-dvalue">{{ b.duration_hours | int if b.duration_hours == (b.duration_hours | int) else b.duration_hours }}h</div>
+      </div>
+      <div class="bk-ditem">
+        <div class="bk-dlabel">Phí đã trả</div>
+        <div class="bk-dvalue" style="color:var(--primary);">{{ '{:,.0f}'.format(b.total_fee) }}đ</div>
+      </div>
+      {% if b.penalty_fee > 0 %}
+      <div class="bk-ditem">
+        <div class="bk-dlabel">Phí phạt</div>
+        <div class="bk-dvalue" style="color:#ef4444;">-{{ '{:,.0f}'.format(b.penalty_fee) }}đ</div>
+      </div>
+      {% endif %}
+      {% if b.refund_fee > 0 %}
+      <div class="bk-ditem">
+        <div class="bk-dlabel">Đã hoàn</div>
+        <div class="bk-dvalue" style="color:#10b981;">+{{ '{:,.0f}'.format(b.refund_fee) }}đ</div>
+      </div>
+      {% endif %}
+    </div>
+
+    {% if b.status == 'pending' %}
+    <div class="bk-actions">
+      {% if b.is_in_window or b.is_before_scheduled %}
+        {# Nhảy sang trang Gửi xe để xác nhận như bình thường #}
+        <a href="{{ url_for('user_park', vehicle_id=b.vehicle_id, slot_id=b.slot_id) }}" 
+           class="btn btn-primary btn-sm" style="text-decoration:none;display:inline-flex;align-items:center;">
+          {% if b.is_in_window %}✅ Check-in ngay{% else %}🚗 Check-in sớm{% endif %}
+        </a>
+      {% else %}
+        <span style="font-size:13px;color:#ef4444;">❌ Đã hết khung giờ</span>
+      {% endif %}
+
+      {% if not b.is_expired %}
+      {% set msg = 'Huy se bi phat ' ~ b.cancel_penalty_pct ~ '% (' ~ '{:,.0f}'.format(b.cancel_penalty_amt) ~ 'd). Hoan lai ' ~ '{:,.0f}'.format(b.cancel_refund_amt) ~ 'd. Xac nhan?' %}
+      <form method="POST" action="{{ url_for('user_cancel_booking', bid=b.id) }}"
+            data-confirm="{{ msg }}">
+        <button class="btn btn-outline btn-sm">
+          🚫 Huỷ (phạt {{ b.cancel_penalty_pct }}%)
+        </button>
+      </form>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const RATES = {{ rates_json | tojson }};
+const SMALL = {{ small_types_json | tojson }};
+let currentVtype = '';
+
+// ── Khởi tạo ──────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  const now = new Date(); now.setMinutes(now.getMinutes() + 5);
+  const el  = document.getElementById('scheduled_time');
+  if (el) el.min = el.value = now.toISOString().slice(0, 16);
+  calcFee();
+  startCountdowns();
+
+  // ── Confirm forms (data-confirm attribute) ──────────────────────────────
+  document.querySelectorAll('form[data-confirm]').forEach(form => {
+    form.addEventListener('submit', e => {
+      if (!confirm(form.dataset.confirm)) e.preventDefault();
+    });
+  });
+});
+
+// ── Tab ────────────────────────────────────────────────────────────────────
+function switchTab(id, btn) {
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ── Xe thay đổi ───────────────────────────────────────────────────────────
+function onVehicleChange(sel) {
+  const opt   = sel.options[sel.selectedIndex];
+  currentVtype = opt ? opt.dataset.type || '' : '';
+  filterSlots();
+  calcFee();
+}
+
+function filterSlots() {
+  const isSmall = SMALL.includes(currentVtype);
+  document.querySelectorAll('#slot-container .slot-card').forEach(c => {
+    if (!currentVtype) { c.style.display = ''; return; }
+    const stype = c.dataset.type;
+    const ok = stype === 'all' || (stype === 'small' && isSmall) || (stype === 'large' && !isSmall);
+    c.style.display = ok ? '' : 'none';
+  });
+  // Reset nếu slot đang chọn bị ẩn
+  const sel = document.querySelector('#slot-container .slot-card.selected');
+  if (sel && sel.style.display === 'none') {
+    sel.classList.remove('selected');
+    document.getElementById('slot_id_input').value = '';
+  }
+}
+
+// ── Chọn slot ─────────────────────────────────────────────────────────────
+function selectSlot(card, slotId) {
+  document.querySelectorAll('#slot-container .slot-card').forEach(c => c.classList.remove('selected'));
+  card.classList.add('selected');
+  document.getElementById('slot_id_input').value = slotId;
+}
+
+// ── Tính phí ──────────────────────────────────────────────────────────────
+function calcFee() {
+  const box   = document.getElementById('price-box');
+  const hours = parseFloat(document.getElementById('duration_hours')?.value || 1);
+  const rate  = RATES[currentVtype];
+  if (!rate || !currentVtype || hours <= 0) { if (box) box.style.display = 'none'; return; }
+
+  const fd  = Math.floor(hours / 24);
+  const rem = hours % 24;
+  const fee = fd * rate.daily_max + Math.min(Math.ceil(rem) * rate.per_hour, rate.daily_max);
+
+  document.getElementById('p-rate').textContent  = rate.per_hour.toLocaleString('vi-VN') + 'đ/h';
+  document.getElementById('p-hours').textContent = hours + ' giờ';
+  document.getElementById('p-total').textContent = Math.round(fee).toLocaleString('vi-VN') + 'đ';
+  if (box) box.style.display = 'block';
+}
+
+function setHours(h) {
+  document.getElementById('duration_hours').value = h; calcFee();
+}
+
+// ── Submit ─────────────────────────────────────────────────────────────────
+function submitBooking() {
+  const veh  = document.getElementById('veh_select');
+  const slot = document.getElementById('slot_id_input');
+  const time = document.getElementById('scheduled_time');
+  if (!veh?.value)  { showToast('Vui lòng chọn xe.', 'warning');       return; }
+  if (!slot?.value) { showToast('Vui lòng chọn vị trí đỗ.', 'warning'); return; }
+  if (!time?.value) { showToast('Vui lòng chọn thời gian hẹn.', 'warning'); return; }
+  if (new Date(time.value) <= new Date()) { showToast('Thời gian phải sau hiện tại.', 'danger'); return; }
+  document.getElementById('booking-form').submit();
+}
+
+// ── Countdown ─────────────────────────────────────────────────────────────
+function fmt(secs) {
+  if (secs <= 0) return '00:00';
+  const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+function startCountdowns() {
+  function tick() {
+    document.querySelectorAll('[id^="cd"]').forEach(el => {
+      const target = new Date(el.dataset.target.replace(' ', 'T'));
+      const secs   = Math.max(0, Math.floor((target - new Date()) / 1000));
+      const span   = el.querySelector('.cd-val');
+      if (!span) return;
+      span.textContent = secs > 0 ? fmt(secs) : (el.dataset.mode === 'before' ? 'Đến giờ!' : 'Hết!');
+      // Đến giờ → reload
+      if (secs === 0 && el.dataset.mode === 'before') setTimeout(() => location.reload(), 2000);
+    });
+  }
+  tick(); setInterval(tick, 1000);
+}
+</script>
+{% endblock %}

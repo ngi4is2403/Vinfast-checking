@@ -20,18 +20,18 @@
       <div class="stat-label">Xe đang gửi</div>
     </div>
   </div>
-  <div class="stat-card">
+  <div class="stat-card" style="border-color:var(--primary);">
     <div class="stat-icon green">💰</div>
     <div>
-      <div class="stat-value" style="font-size:18px;">{{ '{:,.0f}'.format(history.total_spent) }}đ</div>
-      <div class="stat-label">Tổng chi tiêu</div>
+      <div class="stat-value" style="font-size:18px;color:var(--primary);">{{ '{:,.0f}'.format(user.balance|default(0)) }}đ</div>
+      <div class="stat-label">Số dư ví</div>
     </div>
   </div>
   <div class="stat-card">
     <div class="stat-icon amber">📋</div>
     <div>
-      <div class="stat-value">{{ history.parking_orders|length + history.charging_orders|length }}</div>
-      <div class="stat-label">Tổng giao dịch</div>
+      <div class="stat-value" style="font-size:18px;">{{ '{:,.0f}'.format(history.total_spent) }}đ</div>
+      <div class="stat-label">Tổng chi tiêu</div>
     </div>
   </div>
 </div>
@@ -108,7 +108,7 @@
   <div style="display:flex;gap:12px;flex-wrap:wrap;">
     <a href="{{ url_for('user_park') }}" class="btn btn-primary">🅿️ Gửi xe mới</a>
     <a href="{{ url_for('user_checkout') }}" class="btn btn-outline">🚪 Lấy xe</a>
-    <a href="{{ url_for('user_charge') }}" class="btn btn-outline" style="color:var(--electric);border-color:var(--electric);">⚡ Thuê sạc</a>
+    <a href="{{ url_for('user_wallet') }}" class="btn btn-outline" style="color:var(--primary);border-color:var(--primary);">💰 Ví tiền</a>
     <a href="{{ url_for('user_vehicles') }}" class="btn btn-outline">🚗 Quản lý xe</a>
     <a href="{{ url_for('user_history') }}" class="btn btn-outline">📋 Lịch sử</a>
   </div>

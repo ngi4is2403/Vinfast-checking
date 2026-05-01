@@ -83,8 +83,8 @@
               </td>
               <td>
                 {% if o.status == 'active' %}
-                  <form method="POST" action="{{ url_for('admin_checkout', oid=o.id) }}"
-                        onsubmit="return confirm('Xác nhận xe {{ o.plate_number }} ra bãi?')">
+                    <form method="POST" action="{{ url_for('admin_checkout', oid=o.id) }}"
+                          data-confirm-form="Xác nhận xe {{ o.plate_number }} ra bãi?">
                     <button type="submit" class="btn btn-success btn-xs">✅ Cho ra</button>
                   </form>
                 {% else %}

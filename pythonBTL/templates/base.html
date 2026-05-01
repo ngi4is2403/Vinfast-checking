@@ -51,6 +51,10 @@
            class="nav-link {% if request.endpoint=='user_park' %}active{% endif %}">
           <span class="nav-icon">🅿️</span> Gui xe
         </a>
+        <a href="{{ url_for('user_bookings') }}"
+           class="nav-link {% if request.endpoint in ['user_bookings','user_booking_confirm'] %}active{% endif %}">
+          <span class="nav-icon">📅</span> Dat lich
+        </a>
         <a href="{{ url_for('user_checkout') }}"
            class="nav-link {% if request.endpoint=='user_checkout' %}active{% endif %}">
           <span class="nav-icon">🚪</span> Lay xe
@@ -62,6 +66,11 @@
         <a href="{{ url_for('user_history') }}"
            class="nav-link {% if request.endpoint=='user_history' %}active{% endif %}">
           <span class="nav-icon">📋</span> Lich su
+        </a>
+        <div class="nav-section-title">Tai chinh</div>
+        <a href="{{ url_for('user_wallet') }}"
+           class="nav-link {% if request.endpoint=='user_wallet' %}active{% endif %}">
+          <span class="nav-icon">💰</span> Vi tien
         </a>
 
       {% elif role == 'admin' %}
@@ -78,6 +87,10 @@
            class="nav-link {% if request.endpoint=='admin_charging_orders' %}active{% endif %}">
           <span class="nav-icon">⚡</span> Don sac
         </a>
+        <a href="{{ url_for('admin_bookings') }}"
+           class="nav-link {% if request.endpoint=='admin_bookings' %}active{% endif %}">
+          <span class="nav-icon">📅</span> Dat lich
+        </a>
         <div class="nav-section-title">Quan ly</div>
         <a href="{{ url_for('admin_slots') }}"
            class="nav-link {% if request.endpoint=='admin_slots' %}active{% endif %}">
@@ -87,11 +100,22 @@
            class="nav-link {% if request.endpoint=='admin_stations' %}active{% endif %}">
           <span class="nav-icon">🔌</span> Tru sac
         </a>
-
-      {% elif role == 'director' %}
-        <div class="nav-section-title">Bao cao</div>
-        <a href="{{ url_for('director_report') }}" class="nav-link active">
-          <span class="nav-icon">📊</span> Bao cao thang
+        <a href="{{ url_for('admin_users') }}"
+           class="nav-link {% if request.endpoint=='admin_users' %}active{% endif %}">
+          <span class="nav-icon">👥</span> Khach hang
+        </a>
+        <div class="nav-section-title">Tai chinh</div>
+        <a href="{{ url_for('admin_finance') }}"
+           class="nav-link {% if request.endpoint=='admin_finance' %}active{% endif %}">
+          <span class="nav-icon">💰</span> Thu/Chi
+        </a>
+        <a href="{{ url_for('admin_topups') }}"
+           class="nav-link {% if request.endpoint=='admin_topups' %}active{% endif %}">
+          <span class="nav-icon">📱</span> Duyet nap tien
+        </a>
+        <a href="{{ url_for('admin_report') }}"
+           class="nav-link {% if request.endpoint=='admin_report' %}active{% endif %}">
+          <span class="nav-icon">📊</span> Bao cao
         </a>
       {% endif %}
     </nav>
@@ -107,8 +131,7 @@
         <div class="user-info">
           <div class="user-name">{{ session.get('full_name','') }}</div>
           <div class="user-role">
-            {% if role=='admin' %}Admin bai do
-            {% elif role=='director' %}Tong giam doc
+            {% if role=='admin' %}Quan ly bai do
             {% else %}Khach hang{% endif %}
           </div>
         </div>
@@ -129,27 +152,11 @@
     </div>
 
     <div class="page-body">
-      {# Flash messages inside layout #}
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% for cat, msg in messages %}
-          <div class="alert alert-{{ cat }}">
-            {% if cat=='success' %}✅{% elif cat=='danger' %}❌{% elif cat=='warning' %}⚠️{% else %}ℹ️{% endif %}
-            {{ msg }}
-          </div>
-        {% endfor %}
-      {% endwith %}
+      {# Toast notifications — rendered into container at bottom #}
 
 {% else %}
 {# ════════ LAYOUT KHÔNG SIDEBAR (landing, login, register) ════════ #}
-      {# Flash messages for public pages #}
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% for cat, msg in messages %}
-          <div class="alert alert-{{ cat }}"
-               style="position:fixed;top:16px;right:16px;z-index:999;max-width:360px;">
-            {{ msg }}
-          </div>
-        {% endfor %}
-      {% endwith %}
+      {# Toast notifications — rendered into container at bottom #}
 {% endif %}
 
 {# ════════ ĐÂY LÀ NƠI DUY NHẤT ĐỊNH NGHĨA block content ════════ #}
@@ -161,8 +168,320 @@
 </div>{# end app-wrapper #}
 {% endif %}
 
-<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script>
+// ── Dark / Light Mode Toggle ──────────────────────────────────────
+const THEME_KEY  = 'parkev-theme';
+const themeBtn   = document.getElementById('themeToggleBtn');
+const themeIcon  = document.getElementById('themeIcon');
+const themeLabel = document.getElementById('themeLabel');
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem(THEME_KEY, theme);
+  if (themeIcon)  themeIcon.textContent  = theme === 'light' ? '☀️' : '🌙';
+  if (themeLabel) themeLabel.textContent = theme === 'light' ? 'Chế độ sáng' : 'Chế độ tối';
+}
+applyTheme(localStorage.getItem(THEME_KEY) || 'dark');
+if (themeBtn) {
+  themeBtn.addEventListener('click', () => {
+    applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
+}
+
+// ── Logout Modal ──────────────────────────────────────────────────
+function openLogoutModal()  { const m = document.getElementById('logoutModal'); if (m) m.classList.add('open'); }
+function closeLogoutModal() { const m = document.getElementById('logoutModal'); if (m) m.classList.remove('open'); }
+const logoutTrigger = document.getElementById('logoutTriggerBtn');
+const logoutCancel  = document.getElementById('logoutCancelBtn');
+if (logoutTrigger) logoutTrigger.addEventListener('click', openLogoutModal);
+if (logoutCancel)  logoutCancel.addEventListener('click', closeLogoutModal);
+document.addEventListener('click', e => {
+  const m = document.getElementById('logoutModal');
+  if (m && m.classList.contains('open') && e.target === m) closeLogoutModal();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLogoutModal(); });
+
+// ── Tabs ──────────────────────────────────────────────────────────
+document.querySelectorAll('[data-tab]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const parent = btn.closest('.tabs-wrapper') || document;
+    parent.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    parent.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    const pane = parent.querySelector('#' + btn.dataset.tab);
+    if (pane) pane.classList.add('active');
+  });
+});
+
+// ── Slot selector ─────────────────────────────────────────────────
+const slotInput = document.getElementById('slot_id');
+document.querySelectorAll('.slot-card[data-slot-id]').forEach(card => {
+  card.addEventListener('click', () => {
+    document.querySelectorAll('.slot-card').forEach(c => c.classList.remove('selected'));
+    card.classList.add('selected');
+    if (slotInput) slotInput.value = card.dataset.slotId;
+  });
+});
+
+// ── Station selector ──────────────────────────────────────────────
+const stationInput = document.getElementById('station_id');
+document.querySelectorAll('.station-card[data-station-id]').forEach(card => {
+  card.addEventListener('click', () => {
+    document.querySelectorAll('.station-card').forEach(c => c.classList.remove('selected'));
+    card.classList.add('selected');
+    if (stationInput) stationInput.value = card.dataset.stationId;
+    const ctypeInput = document.getElementById('charge_type');
+    if (ctypeInput && card.dataset.chargeType) ctypeInput.value = card.dataset.chargeType;
+  });
+});
+
+// ── Vehicle type → filter slots (park page) ───────────────────────
+const vehSelect = document.getElementById('vehicle_id');
+if (vehSelect && document.getElementById('slots-container')) {
+  vehSelect.addEventListener('change', async () => {
+    const opt   = vehSelect.options[vehSelect.selectedIndex];
+    const vtype = opt.dataset.vtype || '';
+    const res   = await fetch('/api/slots?vehicle_type=' + vtype);
+    const data  = await res.json();
+    if (!data.success) return;
+    const container = document.getElementById('slots-container');
+    if (!container) return;
+    const slots = data.data;
+    if (!slots || !slots.length) {
+      container.innerHTML = '<div class="empty-state"><div class="empty-icon">🅿️</div><p>Không có vị trí phù hợp.</p></div>';
+      return;
+    }
+    const zoneA = slots.filter(s => s.zone === 'A');
+    const zoneB = slots.filter(s => s.zone === 'B');
+    const renderZone = (label, list, icon) => {
+      if (!list.length) return '';
+      let h = '<div class="zone-label">' + icon + ' ' + label + '</div><div class="slot-grid mb-4">';
+      list.forEach(s => {
+        const stype = s.slot_type === 'small' ? 'Xe máy' : s.slot_type === 'large' ? 'Ô tô' : 'Tất cả';
+        h += '<div class="slot-card" data-slot-id="' + s.id + '" data-has-charging="' + (s.has_charging ? 1 : 0) + '">'
+          + '<div class="slot-zone">Khu ' + s.zone + '</div>'
+          + '<div class="slot-code">' + s.slot_code + '</div>'
+          + '<div class="slot-type">' + stype + '</div>'
+          + (s.has_charging ? '<div class="slot-charging">⚡ Gần trụ sạc</div>' : '')
+          + '</div>';
+      });
+      return h + '</div>';
+    };
+    container.innerHTML = renderZone('Khu A — Không sạc', zoneA, '🅿️') + renderZone('Khu B — Có sạc', zoneB, '⚡');
+    container.querySelectorAll('.slot-card[data-slot-id]').forEach(card => {
+      card.addEventListener('click', () => {
+        container.querySelectorAll('.slot-card').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+        if (slotInput) slotInput.value = card.dataset.slotId;
+        if (typeof updateChargingOption === 'function') updateChargingOption();
+      });
+    });
+  });
+}
+
+// ── Generic Modal helpers ─────────────────────────────────────────
+function showModal(id) {
+  const m = document.getElementById(id);
+  if (m) { m.style.display = 'flex'; setTimeout(() => m.classList.add('open'), 10); }
+}
+function hideModal(id) {
+  const m = document.getElementById(id);
+  if (m) { m.classList.remove('open'); setTimeout(() => m.style.display = 'none', 200); }
+}
+document.querySelectorAll('[data-modal-open]').forEach(btn  => btn.addEventListener('click', () => showModal(btn.dataset.modalOpen)));
+document.querySelectorAll('[data-modal-close]').forEach(btn => btn.addEventListener('click', () => hideModal(btn.dataset.modalClose)));
+</script>
 {% block scripts %}{% endblock %}
+
+
+{# ── Confirm Modal ── #}
+<div id="confirm-modal-overlay" class="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-icon-confirm">❓</div>
+    <div class="modal-content">
+      <h3 id="confirm-title">Xác nhận</h3>
+      <p id="confirm-msg"></p>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="confirm-cancel">Hủy</button>
+      <button class="btn btn-primary" id="confirm-ok">Đồng ý</button>
+    </div>
+  </div>
+</div>
+
+<style>
+  .modal-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.4); backdrop-filter: blur(8px);
+    display: none; align-items: center; justify-content: center;
+    z-index: 10000; animation: fadeIn 0.3s ease;
+  }
+  .modal-box {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 20px; padding: 24px; width: 90%; max-width: 400px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.3); text-align: center;
+    transform: scale(0.9); animation: modalIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
+  .modal-icon-confirm {
+    font-size: 40px; margin-bottom: 16px;
+    background: rgba(99, 102, 241, 0.1); width: 80px; height: 80px;
+    line-height: 80px; border-radius: 50%; margin-left: auto; margin-right: auto;
+  }
+  .modal-content h3 { margin: 0 0 8px; font-size: 20px; color: var(--text); }
+  .modal-content p { margin: 0 0 24px; color: var(--text-dim); line-height: 1.5; }
+  .modal-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes modalIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+</style>
+
+<script>
+let confirmCallback = null;
+
+function showModalConfirm(msg, callback, title = 'Xác nhận') {
+  document.getElementById('confirm-msg').innerText = msg;
+  document.getElementById('confirm-title').innerText = title;
+  document.getElementById('confirm-modal-overlay').style.display = 'flex';
+  confirmCallback = callback;
+}
+
+document.getElementById('confirm-cancel').onclick = () => {
+  document.getElementById('confirm-modal-overlay').style.display = 'none';
+  confirmCallback = null;
+};
+
+document.getElementById('confirm-ok').onclick = () => {
+  if (confirmCallback) confirmCallback();
+  document.getElementById('confirm-modal-overlay').style.display = 'none';
+  confirmCallback = null;
+};
+
+// Auto-hook elements with data-confirm
+document.addEventListener('click', function(e) {
+  const target = e.target.closest('[data-confirm-btn]');
+  if (target) {
+    e.preventDefault();
+    const msg = target.getAttribute('data-confirm-btn');
+    showModalConfirm(msg, () => {
+      // If it's inside a form, submit it
+      const form = target.closest('form');
+      if (form) {
+          form.submit();
+      } else if (target.tagName === 'A') {
+          window.location.href = target.href;
+      }
+    });
+  }
+});
+
+// Auto-hook forms with data-confirm-form
+document.addEventListener('submit', function(e) {
+  const msg = e.target.getAttribute('data-confirm-form');
+  if (msg && !e.target.dataset.confirmed) {
+    e.preventDefault();
+    showModalConfirm(msg, () => {
+      e.target.dataset.confirmed = "true";
+      e.target.submit();
+    });
+  }
+});
+</script>
+
+{# ── Toast Container ── #}
+<div id="toast-container"></div>
+<style>
+  #toast-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none;
+    max-width: 400px;
+  }
+  .toast {
+    pointer-events: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 18px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.4;
+    color: #fff;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 8px 32px rgba(0,0,0,.25), 0 0 0 1px rgba(255,255,255,.06);
+    animation: toastIn .4s cubic-bezier(.21,1.02,.73,1) forwards;
+    cursor: pointer;
+    transition: opacity .3s, transform .3s;
+  }
+  .toast.toast-out {
+    animation: toastOut .35s cubic-bezier(.06,.71,.55,1) forwards;
+  }
+  .toast-success { background: linear-gradient(135deg, rgba(16,185,129,.92), rgba(5,150,105,.92)); }
+  .toast-danger  { background: linear-gradient(135deg, rgba(239,68,68,.92), rgba(220,38,38,.92)); }
+  .toast-warning { background: linear-gradient(135deg, rgba(245,158,11,.92), rgba(217,119,6,.92)); }
+  .toast-info    { background: linear-gradient(135deg, rgba(99,102,241,.92), rgba(79,70,229,.92)); }
+  .toast-icon { font-size: 20px; flex-shrink: 0; }
+  .toast-body { flex: 1; }
+  .toast-close {
+    background: none; border: none; color: rgba(255,255,255,.6);
+    font-size: 18px; cursor: pointer; padding: 0 0 0 8px; line-height: 1;
+    transition: color .2s;
+  }
+  .toast-close:hover { color: #fff; }
+  .toast-progress {
+    position: absolute; bottom: 0; left: 0; height: 3px;
+    background: rgba(255,255,255,.35); border-radius: 0 0 12px 12px;
+    animation: toastProgress 4s linear forwards;
+  }
+  @keyframes toastIn {
+    from { opacity: 0; transform: translateX(80px) scale(.95); }
+    to   { opacity: 1; transform: translateX(0) scale(1); }
+  }
+  @keyframes toastOut {
+    from { opacity: 1; transform: translateX(0) scale(1); }
+    to   { opacity: 0; transform: translateX(80px) scale(.9); }
+  }
+  @keyframes toastProgress {
+    from { width: 100%; }
+    to   { width: 0; }
+  }
+</style>
+
+<script>
+function showToast(msg, cat) {
+  const container = document.getElementById('toast-container');
+  const icons = { success:'✅', danger:'❌', warning:'⚠️', info:'ℹ️' };
+  const toast = document.createElement('div');
+  toast.className = 'toast toast-' + (cat || 'info');
+  toast.style.position = 'relative';
+  toast.innerHTML =
+    '<span class="toast-icon">' + (icons[cat] || icons.info) + '</span>' +
+    '<span class="toast-body">' + msg + '</span>' +
+    '<button class="toast-close">&times;</button>' +
+    '<div class="toast-progress"></div>';
+  container.appendChild(toast);
+  // Close on click
+  toast.querySelector('.toast-close').onclick = () => dismissToast(toast);
+  toast.onclick = (e) => { if (e.target.className !== 'toast-close') dismissToast(toast); };
+  // Auto dismiss after 4s
+  setTimeout(() => dismissToast(toast), 4000);
+}
+function dismissToast(el) {
+  if (el.classList.contains('toast-out')) return;
+  el.classList.add('toast-out');
+  setTimeout(() => el.remove(), 350);
+}
+// Render flash messages as toasts
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for cat, msg in messages %}
+    showToast({{ msg|tojson }}, {{ cat|tojson }});
+  {% endfor %}
+{% endwith %}
+</script>
 
 {# ── Modal xác nhận đăng xuất ── #}
 {% if use_layout %}

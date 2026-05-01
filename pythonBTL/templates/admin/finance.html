@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block title %}Thu/Chi — Admin ParkEV{% endblock %}
+{% block page_title %}Quản lý Thu/Chi{% endblock %}
+{% block page_subtitle %}Theo dõi doanh thu và chi phí vận hành{% endblock %}
+
+{% block content %}
+<!-- Filter bar -->
+<div class="card" style="margin-bottom:20px;">
+  <form method="GET" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+    <div class="form-group" style="margin:0;min-width:100px;">
+      <label class="form-label">Tháng</label>
+      <select name="month" class="form-control">
+        {% for m in range(1,13) %}
+          <option value="{{ m }}" {% if month==m %}selected{% endif %}>Tháng {{ m }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group" style="margin:0;min-width:100px;">
+      <label class="form-label">Năm</label>
+      <select name="year" class="form-control">
+        {% for y in [2024,2025,2026,2027] %}
+          <option value="{{ y }}" {% if year==y %}selected{% endif %}>{{ y }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit" class="btn btn-primary" style="margin-bottom:1px;">🔍 Xem</button>
+  </form>
+</div>
+
+<!-- Summary cards -->
+<div class="stats-grid" style="margin-bottom:24px;">
+  <div class="stat-card" style="border-color:var(--success);">
+    <div class="stat-icon green">📥</div>
+    <div>
+      <div class="stat-value" style="font-size:20px;color:var(--success);">{{ '{:,.0f}'.format(total_income) }}đ</div>
+      <div class="stat-label">Tổng thu</div>
+    </div>
+  </div>
+  <div class="stat-card" style="border-color:var(--danger);">
+    <div class="stat-icon red">📤</div>
+    <div>
+      <div class="stat-value" style="font-size:20px;color:var(--danger);">{{ '{:,.0f}'.format(total_expense) }}đ</div>
+      <div class="stat-label">Tổng chi</div>
+    </div>
+  </div>
+  <div class="stat-card" style="border-color:var(--primary);">
+    <div class="stat-icon purple">💰</div>
+    <div>
+      <div class="stat-value" style="font-size:20px;color:{{ 'var(--success)' if net_revenue >= 0 else 'var(--danger)' }};">{{ '{:,.0f}'.format(net_revenue) }}đ</div>
+      <div class="stat-label">Doanh thu ròng</div>
+    </div>
+  </div>
+</div>
+
+<!-- Thu breakdown -->
+<div class="grid-2" style="margin-bottom:20px;align-items:start;">
+  <div class="card">
+    <div class="card-title" style="margin-bottom:16px;">📥 Chi tiết thu nhập (Tháng {{ month }}/{{ year }})</div>
+    <div style="display:grid;gap:8px;">
+      <div style="display:flex;justify-content:space-between;padding:10px 12px;background:var(--bg-card2);border-radius:var(--radius-sm);">
+        <span>🅿️ Thu từ gửi xe</span>
+        <strong style="color:var(--success);">{{ '{:,.0f}'.format(income_parking) }}đ</strong>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:10px 12px;background:var(--bg-card2);border-radius:var(--radius-sm);">
+        <span>⚡ Thu từ sạc xe</span>
+        <strong style="color:var(--success);">{{ '{:,.0f}'.format(income_charging) }}đ</strong>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:10px 12px;background:var(--bg-card2);border-radius:var(--radius-sm);">
+        <span>📋 Thu khác (nhập thủ công)</span>
+        <strong style="color:var(--success);">{{ '{:,.0f}'.format(income_manual) }}đ</strong>
+      </div>
+    </div>
+  </div>
+
+  <!-- Form thêm bút toán -->
+  <div class="card">
+    <div class="card-title" style="margin-bottom:16px;">➕ Thêm bút toán</div>
+    <form method="POST" action="{{ url_for('admin_finance_add') }}">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Loại</label>
+          <select name="entry_type" class="form-control">
+            <option value="expense">📤 Chi</option>
+            <option value="income">📥 Thu</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Danh mục</label>
+          <select name="category" class="form-control">
+            <option value="repair">🔧 Sửa chữa trụ sạc</option>
+            <option value="electricity">⚡ Tiền điện</option>
+            <option value="salary">👷 Lương nhân viên</option>
+            <option value="maintenance">🛠️ Bảo trì</option>
+            <option value="equipment">🔌 Thiết bị</option>
+            <option value="other">📋 Khác</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Số tiền (VNĐ)</label>
+          <input name="amount" type="number" min="1000" class="form-control" placeholder="VD: 500000" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Ngày</label>
+          <input name="entry_date" type="date" class="form-control" required>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Mô tả</label>
+        <input name="description" type="text" class="form-control" placeholder="VD: Sửa trụ CS03 bị hỏng nguồn...">
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">Thêm bút toán</button>
+    </form>
+  </div>
+</div>
+
+<!-- Danh sách bút toán -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">📋 Danh sách bút toán (Tháng {{ month }}/{{ year }})</div>
+  </div>
+  {% if entries %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Ngày</th>
+            <th>Loại</th>
+            <th>Danh mục</th>
+            <th>Số tiền</th>
+            <th>Mô tả</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% set cat_labels = {'repair':'🔧 Sửa chữa','electricity':'⚡ Tiền điện','salary':'👷 Lương','maintenance':'🛠️ Bảo trì','equipment':'🔌 Thiết bị','parking':'🅿️ Gửi xe','charging':'⚡ Sạc xe','other':'📋 Khác'} %}
+          {% for e in entries %}
+            <tr>
+              <td style="color:var(--text-muted);">{{ e.id }}</td>
+              <td style="font-size:12px;">{{ e.entry_date }}</td>
+              <td>
+                {% if e.entry_type == 'income' %}
+                  <span class="badge badge-green">📥 Thu</span>
+                {% else %}
+                  <span class="badge badge-red">📤 Chi</span>
+                {% endif %}
+              </td>
+              <td>{{ cat_labels.get(e.category, e.category) }}</td>
+              <td style="font-weight:700;{{ 'color:var(--success);' if e.entry_type=='income' else 'color:var(--danger);' }}">
+                {{ '{:,.0f}'.format(e.amount) }}đ
+              </td>
+              <td style="font-size:12px;color:var(--text-muted);">{{ e.description or '—' }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <div class="empty-icon">📋</div>
+      <p>Chưa có bút toán nào trong tháng này.</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

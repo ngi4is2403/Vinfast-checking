@@ -17,7 +17,7 @@ import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from database import get_db, row_to_dict, rows_to_dicts
-from config import MIN_PASSWORD_LENGTH, ELECTRIC_TYPES
+from config import MIN_PASSWORD_LENGTH, ELECTRIC_TYPES, DEFAULT_WALLET_BALANCE
 
 # ─────────────────────────────────────────────────────────────────────────────
 # HÀM TIỆN ÍCH — Chuẩn hóa kiểu trả về
@@ -61,11 +61,18 @@ def register_user(full_name, phone, email, password, confirm_password):
         if cur.fetchone():
             return err("Email hoac so dien thoai da duoc su dung.")
         cur.execute(
-            "INSERT INTO users (full_name,phone,email,password_hash,role) VALUES (%s,%s,%s,%s,'user')",
-            (full_name.strip(), phone, email, hash_password(password))
+            "INSERT INTO users (full_name,phone,email,password_hash,role,balance) VALUES (%s,%s,%s,%s,'user',%s)",
+            (full_name.strip(), phone, email, hash_password(password), DEFAULT_WALLET_BALANCE)
         )
+        uid = cur.lastrowid
+        # Tạo giao dịch nạp tiền khởi đầu cho ví
+        if DEFAULT_WALLET_BALANCE > 0:
+            cur.execute(
+                "INSERT INTO wallet_transactions (user_id,tx_type,amount,balance_after,description) VALUES (%s,'topup',%s,%s,'Nap tien khuyen mai khi dang ky')",
+                (uid, DEFAULT_WALLET_BALANCE, DEFAULT_WALLET_BALANCE)
+            )
         conn.commit()
-        return ok({"user_id": cur.lastrowid}, "Dang ky thanh cong!")
+        return ok({"user_id": uid}, "Dang ky thanh cong!")
     except Exception as e:
         conn.rollback()
         return err(f"Loi he thong: {e}")
@@ -252,7 +259,7 @@ def get_user_by_id(user_id):
     cur  = conn.cursor()
     try:
         cur.execute(
-            "SELECT id,full_name,phone,email,role,created_at FROM users WHERE id=%s",
+            "SELECT id,full_name,phone,email,role,balance,created_at FROM users WHERE id=%s",
             (user_id,)
         )
         row = cur.fetchone()
@@ -266,7 +273,131 @@ def get_all_users():
     conn = get_db()
     cur  = conn.cursor()
     try:
-        cur.execute("SELECT id,full_name,phone,email,role,created_at FROM users ORDER BY created_at DESC")
+        cur.execute("SELECT id,full_name,phone,email,role,balance,created_at FROM users ORDER BY created_at DESC")
+        return ok(rows_to_dicts(cur.fetchall()))
+    finally:
+        conn.close()
+
+# =============================================================================
+# 6. VÍ TIỀN (WALLET)
+# =============================================================================
+#
+# Mỗi user có 1 ví tiền (cột balance trong bảng users).
+# Khi nạp/rút/thanh toán → cập nhật balance và ghi wallet_transactions.
+# Khi checkout gửi xe hoặc kết thúc sạc → trừ tiền ví tự động.
+
+def get_wallet_balance(user_id):
+    """Lấy số dư ví hiện tại."""
+    conn = get_db()
+    cur  = conn.cursor()
+    try:
+        cur.execute("SELECT balance FROM users WHERE id=%s", (user_id,))
+        row = cur.fetchone()
+        return row["balance"] if row else 0
+    finally:
+        conn.close()
+
+def wallet_topup(user_id, amount):
+    """Nạp tiền vào ví. amount là số tiền nạp (>0)."""
+    amount = int(amount)
+    if amount <= 0:
+        return err("So tien nap phai lon hon 0.")
+    if amount < 10_000:
+        return err("So tien nap toi thieu la 10.000 VND.")
+    conn = get_db()
+    cur  = conn.cursor()
+    try:
+        cur.execute("SELECT balance FROM users WHERE id=%s FOR UPDATE", (user_id,))
+        row = cur.fetchone()
+        if not row:
+            return err("Nguoi dung khong ton tai.")
+        new_balance = row["balance"] + amount
+        cur.execute("UPDATE users SET balance=%s WHERE id=%s", (new_balance, user_id))
+        cur.execute(
+            "INSERT INTO wallet_transactions (user_id,tx_type,amount,balance_after,description) VALUES (%s,'topup',%s,%s,%s)",
+            (user_id, amount, new_balance, f"Nap tien vao vi")
+        )
+        conn.commit()
+        return ok({"balance": new_balance}, f"Nap {amount:,} VND thanh cong! So du: {new_balance:,} VND")
+    except Exception as e:
+        conn.rollback()
+        return err(f"Loi: {e}")
+    finally:
+        conn.close()
+
+def wallet_withdraw(user_id, amount):
+    """Rút tiền khỏi ví. amount là số tiền rút (>0)."""
+    amount = int(amount)
+    if amount <= 0:
+        return err("So tien rut phai lon hon 0.")
+    if amount < 10_000:
+        return err("So tien rut toi thieu la 10.000 VND.")
+    conn = get_db()
+    cur  = conn.cursor()
+    try:
+        cur.execute("SELECT balance FROM users WHERE id=%s FOR UPDATE", (user_id,))
+        row = cur.fetchone()
+        if not row:
+            return err("Nguoi dung khong ton tai.")
+        if row["balance"] < amount:
+            return err(f"So du khong du. Hien co: {row['balance']:,} VND")
+        new_balance = row["balance"] - amount
+        cur.execute("UPDATE users SET balance=%s WHERE id=%s", (new_balance, user_id))
+        cur.execute(
+            "INSERT INTO wallet_transactions (user_id,tx_type,amount,balance_after,description) VALUES (%s,'withdraw',%s,%s,%s)",
+            (user_id, amount, new_balance, f"Rut tien tu vi")
+        )
+        conn.commit()
+        return ok({"balance": new_balance}, f"Rut {amount:,} VND thanh cong! So du: {new_balance:,} VND")
+    except Exception as e:
+        conn.rollback()
+        return err(f"Loi: {e}")
+    finally:
+        conn.close()
+
+def wallet_deduct(user_id, amount, description="Thanh toan dich vu", ref_type=None, ref_id=None, conn=None, cur=None):
+    """
+    Trừ tiền ví khi thanh toán dịch vụ (gửi xe/sạc).
+    Gọi từ parking_service — nhận conn/cur đã mở để giữ transaction.
+    Nếu không truyền conn/cur, sẽ tự tạo.
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = get_db()
+        cur  = conn.cursor()
+    try:
+        cur.execute("SELECT balance FROM users WHERE id=%s FOR UPDATE", (user_id,))
+        row = cur.fetchone()
+        if not row:
+            return err("Nguoi dung khong ton tai.")
+        if row["balance"] < amount:
+            return err(f"So du vi khong du. Can: {amount:,} VND, Hien co: {row['balance']:,} VND")
+        new_balance = row["balance"] - amount
+        cur.execute("UPDATE users SET balance=%s WHERE id=%s", (new_balance, user_id))
+        cur.execute(
+            "INSERT INTO wallet_transactions (user_id,tx_type,amount,balance_after,description,ref_type,ref_id) VALUES (%s,'payment',%s,%s,%s,%s,%s)",
+            (user_id, amount, new_balance, description, ref_type, ref_id)
+        )
+        if own_conn:
+            conn.commit()
+        return ok({"balance": new_balance})
+    except Exception as e:
+        if own_conn:
+            conn.rollback()
+        return err(f"Loi tru tien vi: {e}")
+    finally:
+        if own_conn:
+            conn.close()
+
+def get_wallet_history(user_id, limit=20):
+    """Lấy lịch sử giao dịch ví."""
+    conn = get_db()
+    cur  = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT * FROM wallet_transactions WHERE user_id=%s ORDER BY created_at DESC LIMIT %s",
+            (user_id, limit)
+        )
         return ok(rows_to_dicts(cur.fetchall()))
     finally:
         conn.close()

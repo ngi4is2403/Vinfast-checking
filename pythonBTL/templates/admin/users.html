@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Khách hàng — Admin ParkEV{% endblock %}
+{% block page_title %}Quản lý khách hàng{% endblock %}
+{% block page_subtitle %}Thông tin và tổng giao dịch của người dùng{% endblock %}
+
+{% block content %}
+<div class="stats-grid" style="margin-bottom:20px;">
+  <div class="stat-card">
+    <div class="stat-icon cyan">👥</div>
+    <div>
+      <div class="stat-value">{{ users|length }}</div>
+      <div class="stat-label">Tổng khách hàng</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon green">💰</div>
+    <div>
+      <div class="stat-value" style="font-size:18px;">{{ '{:,.0f}'.format(users|sum(attribute='balance')) }}đ</div>
+      <div class="stat-label">Tổng số dư ví</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon purple">📊</div>
+    <div>
+      <div class="stat-value" style="font-size:18px;">{{ '{:,.0f}'.format(users|sum(attribute='total_spent')) }}đ</div>
+      <div class="stat-label">Tổng giao dịch</div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  {% if users %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Họ tên</th>
+            <th>SĐT</th>
+            <th>Email</th>
+            <th>Số dư ví</th>
+            <th>Tổng giao dịch</th>
+            <th>Ngày đăng ký</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in users %}
+            <tr>
+              <td style="color:var(--text-muted);">{{ u.id }}</td>
+              <td class="td-bold">
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--electric));display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;">
+                    {{ u.full_name[0] }}
+                  </div>
+                  {{ u.full_name }}
+                </div>
+              </td>
+              <td>{{ u.phone }}</td>
+              <td style="font-size:12px;color:var(--text-muted);">{{ u.email }}</td>
+              <td style="font-weight:700;color:var(--primary);">{{ '{:,.0f}'.format(u.balance) }}đ</td>
+              <td>
+                <span style="font-weight:700;color:var(--success);">{{ '{:,.0f}'.format(u.total_spent) }}đ</span>
+              </td>
+              <td style="font-size:12px;color:var(--text-muted);">{{ u.created_at }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <div class="empty-icon">👥</div>
+      <p>Chưa có khách hàng nào.</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

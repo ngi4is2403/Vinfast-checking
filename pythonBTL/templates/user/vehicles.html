@@ -41,7 +41,7 @@
             ✏️ Sửa
           </button>
           <form method="POST" action="{{ url_for('user_delete_vehicle', vid=v.id) }}"
-                onsubmit="return confirm('Xác nhận xóa xe {{ v.plate_number }}?')">
+                data-confirm-form="Xác nhận xóa xe {{ v.plate_number }}?">
             <button type="submit" class="btn btn-danger btn-sm">🗑️ Xóa</button>
           </form>
         </div>

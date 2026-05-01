@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}QR Nạp tiền — ParkEV{% endblock %}
+{% block page_title %}Quét QR để nạp tiền{% endblock %}
+{% block page_subtitle %}Chuyển khoản theo thông tin bên dưới{% endblock %}
+
+{% block content %}
+<div style="max-width:500px;margin:0 auto;">
+  <div class="card" style="text-align:center;">
+    <!-- Status -->
+    {% if topup.status == 'confirmed' %}
+      <div class="alert alert-success" style="margin-bottom:16px;">
+        ✅ Yêu cầu đã được xác nhận! Tiền đã cộng vào ví.
+      </div>
+    {% elif topup.status == 'rejected' %}
+      <div class="alert alert-danger" style="margin-bottom:16px;">
+        ❌ Yêu cầu bị từ chối. {{ topup.note or '' }}
+      </div>
+    {% else %}
+      <div class="alert alert-warning" style="margin-bottom:16px;">
+        ⏳ Đang chờ xác nhận. Vui lòng chuyển khoản và chờ admin duyệt.
+      </div>
+    {% endif %}
+
+    <!-- QR Code -->
+    <div style="background:#fff;border-radius:12px;padding:16px;display:inline-block;margin-bottom:20px;">
+      <img src="{{ qr_url }}" alt="QR Chuyển khoản"
+           style="width:280px;height:auto;border-radius:8px;"
+           onerror="this.style.display='none';document.getElementById('qr-fallback').style.display='block';">
+      <div id="qr-fallback" style="display:none;padding:20px;color:#666;">
+        ⚠️ Không tải được QR. Vui lòng chuyển khoản thủ công theo thông tin bên dưới.
+      </div>
+    </div>
+
+    <!-- Thông tin chuyển khoản -->
+    <div style="background:var(--bg-card2);border-radius:var(--radius-sm);padding:20px;text-align:left;margin-bottom:20px;">
+      <div style="font-size:13px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px;">
+        Thông tin chuyển khoản
+      </div>
+      <div style="display:grid;gap:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="color:var(--text-muted);">🏦 Ngân hàng</span>
+          <strong>{{ bank_id }}</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="color:var(--text-muted);">📋 Số tài khoản</span>
+          <strong style="font-size:16px;letter-spacing:1px;">{{ account_no }}</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="color:var(--text-muted);">👤 Chủ TK</span>
+          <strong>{{ account_name }}</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding-top:8px;border-top:1px dashed var(--border);">
+          <span style="color:var(--text-muted);">💰 Số tiền</span>
+          <strong style="font-size:20px;color:var(--primary);">{{ '{:,.0f}'.format(topup.amount) }}đ</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="color:var(--text-muted);">📝 Nội dung CK</span>
+          <strong style="color:var(--electric);font-size:14px;letter-spacing:.5px;">{{ topup.ref_code }}</strong>
+        </div>
+      </div>
+    </div>
+
+    <!-- Warning -->
+    <div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:var(--radius-sm);padding:12px;font-size:13px;color:var(--text-muted);line-height:1.7;text-align:left;margin-bottom:16px;">
+      ⚠️ <strong>Quan trọng:</strong><br>
+      • Nội dung chuyển khoản phải đúng: <strong style="color:var(--electric);">{{ topup.ref_code }}</strong><br>
+      • Sau khi chuyển, vui lòng chờ admin xác nhận (thường trong vài phút)<br>
+      • Số tiền sẽ được cộng vào ví sau khi admin duyệt
+    </div>
+
+    <a href="{{ url_for('user_wallet') }}" class="btn btn-outline btn-block">← Quay lại Ví tiền</a>
+  </div>
+</div>
+{% endblock %}

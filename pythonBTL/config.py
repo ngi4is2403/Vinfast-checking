@@ -53,10 +53,33 @@ PARKING_RATES = {
 #   fast            : Trụ sạc nhanh 50-100kW (tiện nhưng đắt hơn)
 # ─────────────────────────────────────────────────────────────────────────────
 CHARGING_RATES = {
-    "reservation_fee": 10_000,   # Phí giữ chỗ trụ sạc (đ/lượt)
-    "slow":            8_000,    # Đơn giá sạc chậm   (đ/kWh)
-    "fast":            12_000,   # Đơn giá sạc nhanh  (đ/kWh)
+    "reservation_fee": 10_000,   # Phí giữ chỗ trụ sạc (đ/lượt) — dùng cho seed data cũ
+    "slow":            8_000,    # Đơn giá sạc chậm   (đ/kWh) — legacy
+    "fast":            12_000,   # Đơn giá sạc nhanh  (đ/kWh) — legacy
 }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BẢNG GIÁ SẠC MỚI — Tính theo thời gian (VNĐ/giờ)
+# Khi user chọn vị trí Khu B có sạc → phí sạc = ceil(giờ) × rate
+# Không phân biệt sạc nhanh/chậm, tính đơn giản theo giờ
+# ─────────────────────────────────────────────────────────────────────────────
+CHARGING_RATE_PER_HOUR = 15_000   # 15.000đ mỗi giờ sạc
+
+# ─────────────────────────────────────────────────────────────────────────────
+# VÍ TIỀN — Số dư mặc định khi tạo tài khoản mới (để demo)
+# ─────────────────────────────────────────────────────────────────────────────
+DEFAULT_WALLET_BALANCE = 500_000   # 500.000đ cho tài khoản demo
+
+# ─────────────────────────────────────────────────────────────────────────────
+# VIETQR — Thông tin ngân hàng để tạo mã QR nạp tiền
+# ─────────────────────────────────────────────────────────────────────────────
+# Danh sách mã ngân hàng: https://api.vietqr.io/v2/banks
+# Ví dụ: MB, VCB, TCB, TPB, ACB, BIDV, VPB, STB...
+# ★ THAY BẰNG THÔNG TIN NGÂN HÀNG CỦA BẠN ★
+VIETQR_BANK_ID    = "MB"                        # Mã ngân hàng (MBBank)
+VIETQR_ACCOUNT_NO = "0388888888"                # Số tài khoản
+VIETQR_ACCOUNT_NAME = "NGUYEN VAN A"            # Tên chủ tài khoản
+VIETQR_TEMPLATE   = "compact2"                  # Template QR (compact, compact2, qr_only)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # LOẠI XE — Dùng để hiển thị tên thân thiện trong giao diện

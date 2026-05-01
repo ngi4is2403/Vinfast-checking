@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+{% block title %}Đặt lịch thành công — ParkEV{% endblock %}
+{% block page_title %}📅 Đặt lịch thành công{% endblock %}
+{% block page_subtitle %}Version 2 — Thanh toán trước, check-in linh hoạt{% endblock %}
+
+{% block content %}
+<style>
+.confirm-wrap {
+  max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px;
+}
+
+/* Countdown box */
+.cd-box {
+  border-radius: var(--radius-sm); padding: 24px; text-align: center;
+  border: 1px solid rgba(99,102,241,.3);
+  background: linear-gradient(135deg, rgba(99,102,241,.1), rgba(167,139,250,.06));
+  transition: background .5s, border-color .5s;
+}
+.cd-label { font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 8px; }
+.cd-clock { font-size: 52px; font-weight: 800; letter-spacing: 2px; color: var(--primary);
+             font-variant-numeric: tabular-nums; line-height: 1; }
+.cd-sub   { font-size: 12px; color: var(--text-muted); margin-top: 8px; }
+.cd-clock.green  { color: #10b981; }
+.cd-clock.red    { color: #ef4444; }
+
+/* Info card */
+.info-card { background: var(--bg-card); border: 1px solid var(--border);
+              border-radius: var(--radius-sm); padding: 18px; }
+.info-title { font-size: 15px; font-weight: 700; margin-bottom: 14px; }
+.info-row   { display: flex; justify-content: space-between; align-items: center;
+               padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 13.5px; }
+.info-row:last-child { border-bottom: none; }
+.info-label { color: var(--text-muted); }
+.info-val   { font-weight: 600; text-align: right; }
+
+/* Rules card — VERSION 2 */
+.rules-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 18px;
+  position: relative; overflow: hidden;
+}
+.rules-card::before {
+  content: 'v2';
+  position: absolute; top: 12px; right: 14px;
+  background: linear-gradient(135deg,var(--primary),#a78bfa);
+  color: #fff; font-size: 10px; font-weight: 800; padding: 2px 7px;
+  border-radius: 8px; letter-spacing: .5px;
+}
+.rules-title { font-size: 15px; font-weight: 700; margin-bottom: 14px; }
+.rule-item {
+  display: flex; gap: 12px; align-items: flex-start;
+  padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13.5px;
+}
+.rule-item:last-child { border-bottom: none; }
+.rule-icon { font-size: 18px; flex-shrink: 0; width: 24px; text-align: center; }
+.rule-text { line-height: 1.5; }
+.rule-text strong { color: var(--text); }
+.rule-badge {
+  display: inline-block; padding: 1px 7px; border-radius: 8px;
+  font-size: 11px; font-weight: 700; margin-left: 4px;
+}
+.badge-warn  { background: rgba(239,68,68,.15);  color: #ef4444; }
+.badge-ok    { background: rgba(16,185,129,.15);  color: #10b981; }
+.badge-info  { background: rgba(99,102,241,.15);  color: var(--primary); }
+
+/* Penalty grid */
+.pen-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-top: 12px; }
+.pen-cell { border-radius: 10px; padding: 10px; text-align: center; }
+.pen-label{ font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+.pen-val  { font-size: 15px; font-weight: 800; }
+.pen-paid   { background: rgba(99,102,241,.1);  }
+.pen-early  { background: rgba(245,158,11,.1);  }
+.pen-late   { background: rgba(239,68,68,.1);   }
+
+/* Actions */
+.actions { display: flex; gap: 10px; flex-wrap: wrap; }
+</style>
+
+<div class="confirm-wrap">
+
+  {# ── Countdown ── #}
+  <div class="cd-box" id="cd-box">
+    <div class="cd-label" id="cd-label">⏳ Đang tính...</div>
+    <div class="cd-clock" id="cd-clock">--:--</div>
+    <div class="cd-sub" id="cd-sub"></div>
+  </div>
+
+  {# ── Thông tin đặt lịch ── #}
+  <div class="info-card">
+    <div class="info-title">📋 Chi tiết đặt lịch #{{ booking.id }}</div>
+    <div class="info-row">
+      <span class="info-label">Xe</span>
+      <span class="info-val">🚗 {{ booking.plate_number }}
+        {% if booking.brand %}<small style="color:var(--text-muted);"> ({{ booking.brand }} {{ booking.model }})</small>{% endif %}
+      </span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Vị trí đỗ</span>
+      <span class="info-val">🅿️ {{ booking.slot_code }}{% if booking.has_charging %} ⚡{% endif %}</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">⏰ Giờ hẹn</span>
+      <span class="info-val">{{ booking.scheduled_time[:16] }}</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">🔚 Hết khung giờ</span>
+      <span class="info-val">{{ booking.expire_at[:16] }}</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Thời gian thuê</span>
+      <span class="info-val">{{ booking.duration_hours | int if booking.duration_hours == (booking.duration_hours | int) else booking.duration_hours }} giờ</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">💰 Đã thanh toán</span>
+      <span class="info-val" style="color:var(--primary);font-size:17px;">{{ '{:,.0f}'.format(booking.total_fee) }}đ</span>
+    </div>
+  </div>
+
+  {# ── Quy tắc — VERSION 2 ── #}
+  <div class="rules-card">
+    <div class="rules-title">📖 Hướng dẫn sử dụng</div>
+
+    <div class="rule-item">
+      <div class="rule-icon">🚗</div>
+      <div class="rule-text">
+        <strong>Đến sớm hơn giờ hẹn:</strong> Hoàn toàn được phép.
+        Phí gửi xe từ lúc bạn vào đến <strong>{{ booking.scheduled_time[:16] }}</strong>
+        sẽ tính thêm khi lấy xe. Từ giờ hẹn trở đi đã được booking cover.
+        <span class="rule-badge badge-info">+ phí sớm khi out</span>
+      </div>
+    </div>
+
+    <div class="rule-item">
+      <div class="rule-icon">✅</div>
+      <div class="rule-text">
+        <strong>Đến đúng hoặc muộn hơn (trong khung giờ):</strong>
+        Check-in miễn phí hoàn toàn — booking đã trả trước cho bạn rồi.
+        Khung giờ hợp lệ: <strong>{{ booking.scheduled_time[:16] }}</strong>
+        → <strong>{{ booking.expire_at[:16] }}</strong>
+        <span class="rule-badge badge-ok">0đ thêm</span>
+      </div>
+    </div>
+
+    <div class="rule-item">
+      <div class="rule-icon">🚫</div>
+      <div class="rule-text">
+        <strong>Huỷ trước giờ hẹn:</strong> phạt
+        <span class="rule-badge badge-warn">30%</span>
+        → hoàn <strong>{{ '{:,.0f}'.format(booking.total_fee - (booking.total_fee * 0.3)|int) }}đ</strong> vào ví.
+      </div>
+    </div>
+
+    <div class="rule-item">
+      <div class="rule-icon">⏱</div>
+      <div class="rule-text">
+        <strong>Huỷ trong khung giờ (sau giờ hẹn):</strong> phạt
+        <span class="rule-badge badge-warn">50%</span>
+        → hoàn <strong>{{ '{:,.0f}'.format(booking.total_fee - (booking.total_fee * 0.5)|int) }}đ</strong> vào ví.
+      </div>
+    </div>
+
+    <div class="rule-item">
+      <div class="rule-icon">❌</div>
+      <div class="rule-text">
+        <strong>Không check-in đến hết khung giờ (no-show):</strong>
+        Mất toàn bộ phí đã đặt, slot được giải phóng tự động.
+        <span class="rule-badge badge-warn">-100%</span>
+      </div>
+    </div>
+
+    {# Bảng so sánh phí #}
+    <div class="pen-grid">
+      <div class="pen-cell pen-paid">
+        <div class="pen-label">Phí đã trả</div>
+        <div class="pen-val" style="color:var(--primary);">{{ '{:,.0f}'.format(booking.total_fee) }}đ</div>
+      </div>
+      <div class="pen-cell pen-early">
+        <div class="pen-label">Phạt huỷ sớm (30%)</div>
+        <div class="pen-val" style="color:#f59e0b;">{{ '{:,.0f}'.format((booking.total_fee * 0.3)|int) }}đ</div>
+      </div>
+      <div class="pen-cell pen-late">
+        <div class="pen-label">Phạt huỷ muộn (50%)</div>
+        <div class="pen-val" style="color:#ef4444;">{{ '{:,.0f}'.format((booking.total_fee * 0.5)|int) }}đ</div>
+      </div>
+    </div>
+  </div>
+
+  {# ── Actions ── #}
+  <div class="actions">
+    {% if booking.status == 'pending' %}
+      {% if booking.is_in_window or booking.is_before_scheduled %}
+      <form method="POST" action="{{ url_for('user_checkin_booking', bid=booking.id) }}"
+            onsubmit="return confirm({% if booking.is_before_scheduled %}'Đến sớm hơn giờ hẹn. Phí gửi sớm sẽ tính thêm khi lấy xe. Xác nhận?'{% else %}'Xác nhận check-in? Booking đã cover toàn bộ phí.'{% endif %})">
+        <button class="btn btn-primary">
+          {% if booking.is_before_scheduled %}🚗 Check-in sớm{% else %}✅ Check-in ngay{% endif %}
+        </button>
+      </form>
+      {% endif %}
+
+      {% if not booking.is_expired %}
+      <form method="POST" action="{{ url_for('user_cancel_booking', bid=booking.id) }}"
+            onsubmit="return confirm('Phạt {{ booking.cancel_penalty_pct }}%. Hoàn {{ \'{:,.0f}\'.format(booking.cancel_refund_amt) }}đ. Xác nhận huỷ?')">
+        <button class="btn btn-outline">
+          🚫 Huỷ (phạt {{ booking.cancel_penalty_pct }}%)
+        </button>
+      </form>
+      {% endif %}
+    {% endif %}
+    <a href="{{ url_for('user_bookings') }}" class="btn btn-outline">📋 Xem tất cả lịch</a>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const SCHED    = new Date('{{ booking.scheduled_time }}'.replace(' ','T'));
+const EXPIRE   = new Date('{{ booking.expire_at }}'.replace(' ','T'));
+const clockEl  = document.getElementById('cd-clock');
+const labelEl  = document.getElementById('cd-label');
+const subEl    = document.getElementById('cd-sub');
+const boxEl    = document.getElementById('cd-box');
+
+function fmt(secs) {
+  if (secs <= 0) return '00:00';
+  const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+function tick() {
+  const now = new Date();
+  if (now < SCHED) {
+    const secs = Math.floor((SCHED - now) / 1000);
+    labelEl.textContent = '📅 Đến giờ hẹn sau';
+    clockEl.textContent = fmt(secs);
+    clockEl.className   = 'cd-clock';
+    subEl.textContent   = `Giờ hẹn: ${SCHED.toLocaleString('vi-VN')}`;
+    boxEl.style.background   = 'linear-gradient(135deg,rgba(99,102,241,.1),rgba(167,139,250,.06))';
+    boxEl.style.borderColor  = 'rgba(99,102,241,.3)';
+    if (secs === 0) setTimeout(() => location.reload(), 1500);
+  } else if (now <= EXPIRE) {
+    const secs = Math.floor((EXPIRE - now) / 1000);
+    labelEl.textContent = '⏱ Khung giờ check-in còn lại';
+    clockEl.textContent = fmt(secs);
+    clockEl.className   = secs < 600 ? 'cd-clock red' : 'cd-clock green';
+    subEl.textContent   = `Hết lúc: ${EXPIRE.toLocaleString('vi-VN')}`;
+    boxEl.style.background  = 'linear-gradient(135deg,rgba(16,185,129,.1),rgba(5,150,105,.06))';
+    boxEl.style.borderColor = 'rgba(16,185,129,.3)';
+  } else {
+    labelEl.textContent = '⏰ Đã hết khung giờ';
+    clockEl.textContent = 'Hết giờ';
+    clockEl.className   = 'cd-clock red';
+    subEl.textContent   = 'Đặt lịch đã hết hạn';
+    boxEl.style.background  = 'linear-gradient(135deg,rgba(239,68,68,.08),rgba(220,38,38,.04))';
+    boxEl.style.borderColor = 'rgba(239,68,68,.3)';
+  }
+}
+tick(); setInterval(tick, 1000);
+</script>
+{% endblock %}

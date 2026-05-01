@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # =============================================================================
 # modules/parking_service.py — Dịch vụ gửi xe, lấy xe, sạc điện và vận hành bãi
 #
@@ -26,7 +27,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from datetime import datetime
 from database import get_db, row_to_dict, rows_to_dicts
-from config import PARKING_RATES, CHARGING_RATES, SMALL_VEHICLES, LARGE_VEHICLES, ELECTRIC_TYPES
+from config import PARKING_RATES, CHARGING_RATES, SMALL_VEHICLES, LARGE_VEHICLES, ELECTRIC_TYPES, CHARGING_RATE_PER_HOUR
+from modules.user_service import wallet_deduct
 
 # ────────────────────────────────────────────────────────────────────────────────
 # HÀM TIỆN ÍCH
@@ -83,41 +85,66 @@ def calculate_parking_fee(vehicle_type, time_in, time_out=None):
 
 def calculate_charging_fee(charge_type, kwh_consumed):
     """
-    Tính phí sạc xe điện:
+    Tính phí sạc xe điện (legacy — dùng cho seed data cũ):
       Phí = phí_giữ_chỗ + kWh × đơn_giá/kWh
-    Phí giữ chỗ (reservation_fee) thu một lần khi bắt đầu sạc.
     """
     rate_kwh = CHARGING_RATES.get(charge_type, 0)
     return int(CHARGING_RATES["reservation_fee"] + kwh_consumed * rate_kwh)
+
+def calculate_charging_fee_by_time(time_start, time_end=None):
+    """
+    Tính phí sạc theo thời gian (logic mới):
+      Phí = ceil(số_giờ_sạc) × CHARGING_RATE_PER_HOUR
+    Tối thiểu 1 giờ.
+    """
+    t_start = to_dt(time_start)
+    t_end   = to_dt(time_end) if time_end else datetime.now()
+    total_h = max(0, (t_end - t_start).total_seconds() / 3600)
+    hours   = max(1, math.ceil(total_h))  # Tối thiểu 1 giờ
+    return int(hours * CHARGING_RATE_PER_HOUR)
 
 # ────────────────────────────────────────────────────────────────────────────────
 # 1. GỬI XE
 # ────────────────────────────────────────────────────────────────────────────────
 
-def get_available_slots(vehicle_type=None):
-    """Lấy vị trí trống, xe điện ưu tiên zone B."""
+def get_available_slots(vehicle_type=None, user_id=None):
+    """
+    Lấy vị trí trống. 
+    Nếu có user_id: Lấy thêm cả các slot mà user này đang đặt lịch (reserved).
+    """
     conn = get_db()
     cur  = conn.cursor()
     try:
+        # SQL cơ bản: lấy slot available
+        where_clause = "(status='available')"
+        params = []
+        
+        if user_id:
+            # Lấy thêm slot đang được user này giữ chỗ (reserved)
+            where_clause = "(status='available' OR (status='reserved' AND id IN (SELECT slot_id FROM bookings WHERE user_id=%s AND status='pending')))"
+            params.append(user_id)
+
+        query = f"SELECT * FROM parking_slots WHERE {where_clause}"
+        
         if vehicle_type in SMALL_VEHICLES:
-            cur.execute(
-                "SELECT * FROM parking_slots WHERE status='available' AND slot_type IN ('small','both') "
-                "ORDER BY (CASE WHEN %s IN ('e_motorcycle','e_car') THEN has_charging ELSE 0 END) DESC, slot_code",
-                (vehicle_type,)
-            )
+            query += " AND slot_type IN ('small','both') ORDER BY has_charging DESC, slot_code"
         elif vehicle_type in LARGE_VEHICLES:
-            cur.execute(
-                "SELECT * FROM parking_slots WHERE status='available' AND slot_type IN ('large','both') "
-                "ORDER BY (CASE WHEN %s IN ('e_motorcycle','e_car') THEN has_charging ELSE 0 END) DESC, slot_code",
-                (vehicle_type,)
-            )
+            query += " AND slot_type IN ('large','both') ORDER BY has_charging DESC, slot_code"
         else:
-            cur.execute("SELECT * FROM parking_slots WHERE status='available' ORDER BY slot_code")
+            query += " ORDER BY slot_code"
+
+        cur.execute(query, params)
         return ok(rows_to_dicts(cur.fetchall()))
     finally:
         conn.close()
 
-def create_parking_order(user_id, vehicle_id, slot_id, notes=""):
+def create_parking_order(user_id, vehicle_id, slot_id, notes="", want_charging=False):
+    # ── Validate đầu vào trước khi chạm DB ─────────────────────────────────
+    if not vehicle_id:
+        return err("Vui long chon phuong tien.")
+    if not slot_id:
+        return err("Vui long chon vi tri do xe.")
+    # ────────────────────────────────────────────────────────────────────────
     conn = get_db()
     cur  = conn.cursor()
     try:
@@ -128,10 +155,39 @@ def create_parking_order(user_id, vehicle_id, slot_id, notes=""):
             return err("Xe khong ton tai hoac khong thuoc ve ban.")
         vtype = veh["vehicle_type"]
 
-        # Kiểm tra xe có đơn active không
-        cur.execute("SELECT id FROM parking_orders WHERE vehicle_id=%s AND status='active'", (vehicle_id,))
-        if cur.fetchone():
-            return err("Xe nay dang co don gui xe chua hoan tat.")
+        # ── KIỂM TRA ĐẶT LỊCH (Ưu tiên logic Check-in sớm) ────────────────
+        cur.execute(
+            "SELECT id FROM bookings WHERE vehicle_id=%s AND status='pending'",
+            (vehicle_id,)
+        )
+        bk = cur.fetchone()
+        if bk:
+            # Nếu xe đang đỗ sớm rồi → báo lỗi thân thiện
+            cur.execute("SELECT id FROM parking_orders WHERE vehicle_id=%s AND status='active'", (vehicle_id,))
+            if cur.fetchone():
+                return err("Xe nay dang trong bai (check-in som). Vui long lay xe khi muon roi bai.")
+            # Chưa vào → redirect sang checkin_booking
+            from modules.booking_service import checkin_booking
+            bid = bk["id"]
+            conn = None   # Đặt None để finally không đóng lần 2
+            return checkin_booking(bid, user_id)
+        # ──────────────────────────────────────────────────────────────────
+
+        # Kiểm tra xe có đơn gửi xe active (đang đỗ thực sự) không
+        cur.execute(
+            """SELECT po.id, ps.slot_code, ps.zone, po.time_in
+               FROM parking_orders po
+               JOIN parking_slots ps ON po.slot_id=ps.id
+               WHERE po.vehicle_id=%s AND po.status='active'""",
+            (vehicle_id,)
+        )
+        active = cur.fetchone()
+        if active:
+            return err(
+                f"Xe nay dang duoc gui tai {active['slot_code']} (Khu {active['zone']}) "
+                f"tu {str(active['time_in'])[:16]}. "
+                f"Vui long lay xe truoc khi gui lai."
+            )
 
         # Kiểm tra slot
         cur.execute("SELECT * FROM parking_slots WHERE id=%s", (slot_id,))
@@ -157,13 +213,36 @@ def create_parking_order(user_id, vehicle_id, slot_id, notes=""):
         )
         order_id = cur.lastrowid
         cur.execute("UPDATE parking_slots SET status='occupied' WHERE id=%s", (slot_id,))
+
+        charging_order_id = None
+        # Nếu user chọn sạc và slot có sạc (Khu B)
+        if want_charging and slot["has_charging"]:
+            # Kiểm tra xe có đơn sạc active không
+            cur.execute("SELECT id FROM charging_orders WHERE vehicle_id=%s AND status='active'", (vehicle_id,))
+            if not cur.fetchone():
+                # Tìm trụ sạc trống (bất kỳ loại nào)
+                cur.execute("SELECT * FROM charging_stations WHERE status='available' ORDER BY station_code LIMIT 1")
+                station = cur.fetchone()
+                if station:
+                    cur.execute(
+                        "INSERT INTO charging_orders (user_id,vehicle_id,station_id,charge_type,time_start,status) VALUES (%s,%s,%s,%s,%s,'active')",
+                        (user_id, vehicle_id, station["id"], station["station_type"], now_str())
+                    )
+                    charging_order_id = cur.lastrowid
+                    cur.execute("UPDATE charging_stations SET status='busy' WHERE id=%s", (station["id"],))
+
         conn.commit()
-        return ok({"order_id": order_id}, "Tao don gui xe thanh cong!")
+        msg = "Tao don gui xe thanh cong!"
+        if charging_order_id:
+            msg += " Da bat dau sac xe."
+        return ok({"order_id": order_id, "charging_order_id": charging_order_id}, msg)
     except Exception as e:
-        conn.rollback()
+        if conn:
+            conn.rollback()
         return err(f"Loi he thong: {e}")
     finally:
-        conn.close()
+        if conn:
+            conn.close()
 
 # ────────────────────────────────────────────────────────────────────────────────
 # 2. LẤY XE
@@ -211,27 +290,161 @@ def checkout_parking(order_id, user_id):
         if not order:
             return err("Don gui xe khong ton tai hoac da hoan tat.")
 
-        t_out  = now_str()
-        fee    = calculate_parking_fee(order["vehicle_type"], order["time_in"], t_out)
-        slot_id = order["slot_id"]
+        t_out       = now_str()
+        slot_id     = order["slot_id"]
+        vehicle_id  = order["vehicle_id"]
+
+        # ── Tính trước toàn bộ phí để kiểm tra số dư ────────────────────────
+        booking_credit  = int(order.get("booking_credit") or 0)
+        linked_booking  = order.get("booking_id")
+        parking_fee_raw = calculate_parking_fee(order["vehicle_type"], order["time_in"], t_out)
+        bk              = None
+
+        # Tính parking_fee (phần thực thu ngoài booking credit)
+        if linked_booking and booking_credit > 0:
+            cur.execute("SELECT * FROM bookings WHERE id=%s", (linked_booking,))
+            bk = cur.fetchone()
+            if bk:
+                from datetime import timedelta as td
+                time_in_dt   = to_dt(order["time_in"])
+                scheduled_dt = to_dt(bk["scheduled_time"])
+                expire_dt    = scheduled_dt + td(hours=float(bk["duration_hours"]))
+                t_out_dt     = to_dt(t_out)
+
+                early_hours = max(0.0, (min(scheduled_dt, t_out_dt) - time_in_dt).total_seconds() / 3600)
+                early_fee   = calculate_parking_fee(
+                    order["vehicle_type"],
+                    time_in_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                    min(scheduled_dt, t_out_dt).strftime("%Y-%m-%d %H:%M:%S")
+                ) if early_hours > 0 else 0
+
+                extra_hours = max(0.0, (t_out_dt - expire_dt).total_seconds() / 3600)
+                extra_fee   = calculate_parking_fee(
+                    order["vehicle_type"],
+                    expire_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                    t_out
+                ) if extra_hours > 0 else 0
+
+                parking_fee = early_fee + extra_fee
+            else:
+                parking_fee = parking_fee_raw
+                early_fee   = 0
+                extra_fee   = 0
+        else:
+            parking_fee = parking_fee_raw
+            early_fee   = 0
+            extra_fee   = 0
+
+        # Tính phí sạc nếu đang sạc
+        charging_fee = 0
+        cur.execute(
+            "SELECT co.*, cs.station_code FROM charging_orders co "
+            "JOIN charging_stations cs ON co.station_id=cs.id "
+            "WHERE co.vehicle_id=%s AND co.status='active'",
+            (vehicle_id,)
+        )
+        active_charge = cur.fetchone()
+        if active_charge:
+            charging_fee = calculate_charging_fee_by_time(active_charge["time_start"], t_out)
+
+        total_fee = parking_fee + charging_fee
+
+        # ── KIỂM TRA SỐ DƯ TRƯỚC — nếu không đủ thì BLOCK checkout ─────────
+        if total_fee > 0:
+            cur.execute("SELECT balance FROM users WHERE id=%s", (user_id,))
+            u = cur.fetchone()
+            balance = u["balance"] if u else 0
+            if balance < total_fee:
+                shortfall = total_fee - balance
+                detail = []
+                if early_fee > 0:
+                    detail.append(f"phi den som: {early_fee:,}d")
+                if extra_fee > 0:
+                    detail.append(f"phi o them: {extra_fee:,}d")
+                if charging_fee > 0:
+                    detail.append(f"phi sac: {charging_fee:,}d")
+                if booking_credit > 0:
+                    detail.append(f"(booking da cover: {booking_credit:,}d)")
+                detail_str = " | ".join(detail) if detail else f"phi gui xe: {parking_fee:,}d"
+                return err(
+                    f"So du vi khong du de lay xe! "
+                    f"Can thanh toan: {total_fee:,}d ({detail_str}). "
+                    f"So du hien tai: {balance:,}d. "
+                    f"Vui long nap them it nhat {shortfall:,}d truoc khi lay xe."
+                )
+        # ────────────────────────────────────────────────────────────────────
+
+        # ── Ghi DB (đã đủ tiền) ─────────────────────────────────────────────
+        if linked_booking and bk:
+            cur.execute(
+                "UPDATE parking_orders SET early_fee=%s WHERE id=%s",
+                (early_fee, order_id)
+            )
+            cur.execute(
+                "UPDATE bookings SET status='completed',checkout_at=%s WHERE id=%s",
+                (t_out, linked_booking)
+            )
+
+        if active_charge:
+            cur.execute(
+                "UPDATE charging_orders SET time_end=%s,total_fee=%s,status='completed' WHERE id=%s",
+                (t_out, charging_fee, active_charge["id"])
+            )
+            cur.execute("UPDATE charging_stations SET status='available' WHERE id=%s", (active_charge["station_id"],))
+            cur.execute(
+                "INSERT INTO payments (order_type,order_id,amount,paid_at) VALUES ('charging',%s,%s,%s)",
+                (active_charge["id"], charging_fee, t_out)
+            )
 
         cur.execute(
             "UPDATE parking_orders SET time_out=%s,status='completed',total_fee=%s WHERE id=%s",
-            (t_out, fee, order_id)
+            (t_out, parking_fee, order_id)
         )
         cur.execute("UPDATE parking_slots SET status='available' WHERE id=%s", (slot_id,))
         cur.execute(
             "INSERT INTO payments (order_type,order_id,amount,paid_at) VALUES ('parking',%s,%s,%s)",
-            (order_id, fee, t_out)
+            (order_id, parking_fee, t_out)
         )
+
+        # Trừ tiền ví
+        if total_fee > 0:
+            deduct_result = wallet_deduct(
+                user_id, total_fee,
+                f"Thanh toan gui xe + sac: {total_fee:,} VND",
+                ref_type='parking', ref_id=order_id,
+                conn=conn, cur=cur
+            )
+            if not deduct_result["success"]:
+                conn.rollback()
+                return err(deduct_result["message"])
+
         conn.commit()
-        return ok({"total_fee": fee, "time_out": t_out},
-                  f"Lay xe thanh cong! Phi: {fee:,} VND")
+
+        # Thông báo
+        if linked_booking and booking_credit > 0:
+            msg = (f"Lay xe thanh cong! "
+                   f"Booking da cover: {booking_credit:,}d. "
+                   f"Phi them (den som / o qua gio): {parking_fee:,}d.")
+            if charging_fee > 0:
+                msg += f" Phi sac: {charging_fee:,}d."
+        else:
+            msg = f"Lay xe thanh cong! Phi gui: {parking_fee:,} VND"
+            if charging_fee > 0:
+                msg += f" + Phi sac: {charging_fee:,} VND"
+            msg += f" = Tong: {total_fee:,} VND (da tru tu vi)"
+
+        return ok({
+            "total_fee": total_fee, "parking_fee": parking_fee,
+            "charging_fee": charging_fee, "booking_credit": booking_credit,
+            "time_out": t_out
+        }, msg)
+
     except Exception as e:
         conn.rollback()
         return err(f"Loi: {e}")
     finally:
         conn.close()
+
 
 # ────────────────────────────────────────────────────────────────────────────────
 # 3. THUÊ SẠC
@@ -295,11 +508,10 @@ def create_charging_order(user_id, vehicle_id, station_id, charge_type):
     finally:
         conn.close()
 
-def end_charging(order_id, user_id, kwh_consumed):
+def end_charging(order_id, user_id, kwh_consumed=0):
     conn = get_db()
     cur  = conn.cursor()
     try:
-        kwh_consumed = max(0.0, float(kwh_consumed or 0))
         cur.execute(
             """SELECT co.*, cs.station_code FROM charging_orders co
                JOIN charging_stations cs ON co.station_id=cs.id
@@ -311,20 +523,34 @@ def end_charging(order_id, user_id, kwh_consumed):
             return err("Don sac khong ton tai hoac da hoan tat.")
 
         t_end = now_str()
-        fee   = calculate_charging_fee(order["charge_type"], kwh_consumed)
+        # Tính phí theo thời gian (logic mới)
+        fee = calculate_charging_fee_by_time(order["time_start"], t_end)
 
         cur.execute(
             "UPDATE charging_orders SET time_end=%s,kwh_consumed=%s,total_fee=%s,status='completed' WHERE id=%s",
-            (t_end, kwh_consumed, fee, order_id)
+            (t_end, 0, fee, order_id)
         )
         cur.execute("UPDATE charging_stations SET status='available' WHERE id=%s", (order["station_id"],))
         cur.execute(
             "INSERT INTO payments (order_type,order_id,amount,paid_at) VALUES ('charging',%s,%s,%s)",
             (order_id, fee, t_end)
         )
+
+        # Trừ tiền ví
+        if fee > 0:
+            deduct_result = wallet_deduct(
+                user_id, fee,
+                f"Thanh toan sac xe: {fee:,} VND",
+                ref_type='charging', ref_id=order_id,
+                conn=conn, cur=cur
+            )
+            if not deduct_result["success"]:
+                conn.rollback()
+                return err(deduct_result["message"])
+
         conn.commit()
-        return ok({"total_fee": fee, "kwh_consumed": kwh_consumed},
-                  f"Sac hoan tat! Phi: {fee:,} VND")
+        return ok({"total_fee": fee},
+                  f"Sac hoan tat! Phi: {fee:,} VND (da tru tu vi)")
     except Exception as e:
         conn.rollback()
         return err(f"Loi: {e}")
@@ -342,6 +568,7 @@ def get_user_history(user_id, month=None, year=None, tx_type=None, status=None):
         parking_orders  = []
         charging_orders = []
 
+        # ── Lịch sử gửi xe ─────────────────────────────────
         if tx_type in (None, "parking"):
             q = """SELECT po.id, 'parking' as tx_type, po.time_in as time_start, po.time_out as time_end,
                           po.status, po.total_fee, v.plate_number, v.vehicle_type, v.brand, v.model,
@@ -351,9 +578,12 @@ def get_user_history(user_id, month=None, year=None, tx_type=None, status=None):
                    JOIN parking_slots ps ON po.slot_id=ps.id
                    WHERE po.user_id=%s"""
             p = [user_id]
-            if month and year:
-                q += " AND DATE_FORMAT(po.time_in,'%%Y-%%m')=%s"
-                p.append(f"{year:04d}-{month:02d}")
+            if month:                                      # Lọc tháng độc lập
+                q += " AND MONTH(po.time_in)=%s"
+                p.append(month)
+            if year:                                       # Lọc năm độc lập
+                q += " AND YEAR(po.time_in)=%s"
+                p.append(year)
             if status:
                 q += " AND po.status=%s"
                 p.append(status)
@@ -361,6 +591,7 @@ def get_user_history(user_id, month=None, year=None, tx_type=None, status=None):
             cur.execute(q, p)
             parking_orders = rows_to_dicts(cur.fetchall())
 
+        # ── Lịch sử sạc xe ─────────────────────────────────
         if tx_type in (None, "charging"):
             q = """SELECT co.id, 'charging' as tx_type, co.time_start, co.time_end,
                           co.status, co.total_fee, v.plate_number, v.vehicle_type, v.brand, v.model,
@@ -370,9 +601,12 @@ def get_user_history(user_id, month=None, year=None, tx_type=None, status=None):
                    JOIN charging_stations cs ON co.station_id=cs.id
                    WHERE co.user_id=%s"""
             p = [user_id]
-            if month and year:
-                q += " AND DATE_FORMAT(co.time_start,'%%Y-%%m')=%s"
-                p.append(f"{year:04d}-{month:02d}")
+            if month:                                      # Lọc tháng độc lập
+                q += " AND MONTH(co.time_start)=%s"
+                p.append(month)
+            if year:                                       # Lọc năm độc lập
+                q += " AND YEAR(co.time_start)=%s"
+                p.append(year)
             if status:
                 q += " AND co.status=%s"
                 p.append(status)
@@ -380,19 +614,23 @@ def get_user_history(user_id, month=None, year=None, tx_type=None, status=None):
             cur.execute(q, p)
             charging_orders = rows_to_dicts(cur.fetchall())
 
-        # Tổng chi
-        cur.execute(
-            "SELECT COALESCE(SUM(p.amount),0) as total FROM payments p "
-            "JOIN parking_orders po ON p.order_type='parking' AND p.order_id=po.id "
-            "WHERE po.user_id=%s", (user_id,)
-        )
+        # ── Tổng chi tiêu theo bộ lọc đang áp dụng ─────────────────
+        pq = ("SELECT COALESCE(SUM(p.amount),0) as total FROM payments p "
+              "JOIN parking_orders po ON p.order_type='parking' AND p.order_id=po.id "
+              "WHERE po.user_id=%s")
+        pp = [user_id]
+        if month: pq += " AND MONTH(po.time_in)=%s"; pp.append(month)
+        if year:  pq += " AND YEAR(po.time_in)=%s";  pp.append(year)
+        cur.execute(pq, pp)
         total_parking = cur.fetchone()["total"] or 0
 
-        cur.execute(
-            "SELECT COALESCE(SUM(p.amount),0) as total FROM payments p "
-            "JOIN charging_orders co ON p.order_type='charging' AND p.order_id=co.id "
-            "WHERE co.user_id=%s", (user_id,)
-        )
+        cq = ("SELECT COALESCE(SUM(p.amount),0) as total FROM payments p "
+              "JOIN charging_orders co ON p.order_type='charging' AND p.order_id=co.id "
+              "WHERE co.user_id=%s")
+        cp = [user_id]
+        if month: cq += " AND MONTH(co.time_start)=%s"; cp.append(month)
+        if year:  cq += " AND YEAR(co.time_start)=%s";  cp.append(year)
+        cur.execute(cq, cp)
         total_charging = cur.fetchone()["total"] or 0
 
         return ok({
@@ -452,20 +690,57 @@ def admin_confirm_checkout(order_id):
         if not order:
             return err("Don gui xe khong ton tai hoac da hoan tat.")
 
-        t_out = now_str()
-        fee   = calculate_parking_fee(order["vehicle_type"], order["time_in"], t_out)
+        t_out       = now_str()
+        parking_fee = calculate_parking_fee(order["vehicle_type"], order["time_in"], t_out)
+        vehicle_id  = order["vehicle_id"]
+        user_id     = order["user_id"]
+
+        # Tự kết thúc sạc nếu có
+        charging_fee = 0
+        cur.execute(
+            "SELECT co.* FROM charging_orders co WHERE co.vehicle_id=%s AND co.status='active'",
+            (vehicle_id,)
+        )
+        active_charge = cur.fetchone()
+        if active_charge:
+            charging_fee = calculate_charging_fee_by_time(active_charge["time_start"], t_out)
+            cur.execute(
+                "UPDATE charging_orders SET time_end=%s,total_fee=%s,status='completed' WHERE id=%s",
+                (t_out, charging_fee, active_charge["id"])
+            )
+            cur.execute("UPDATE charging_stations SET status='available' WHERE id=%s", (active_charge["station_id"],))
+            cur.execute(
+                "INSERT INTO payments (order_type,order_id,amount,paid_at) VALUES ('charging',%s,%s,%s)",
+                (active_charge["id"], charging_fee, t_out)
+            )
+
+        total_fee = parking_fee + charging_fee
 
         cur.execute(
             "UPDATE parking_orders SET time_out=%s,status='completed',total_fee=%s WHERE id=%s",
-            (t_out, fee, order_id)
+            (t_out, parking_fee, order_id)
         )
         cur.execute("UPDATE parking_slots SET status='available' WHERE id=%s", (order["slot_id"],))
         cur.execute(
             "INSERT INTO payments (order_type,order_id,amount,paid_at) VALUES ('parking',%s,%s,%s)",
-            (order_id, fee, t_out)
+            (order_id, parking_fee, t_out)
         )
+
+        # Trừ tiền ví user
+        if total_fee > 0:
+            wallet_deduct(
+                user_id, total_fee,
+                f"Admin checkout: {total_fee:,} VND",
+                ref_type='parking', ref_id=order_id,
+                conn=conn, cur=cur
+            )
+
         conn.commit()
-        return ok({"total_fee": fee}, f"Xe da ra bai. Phi: {fee:,} VND")
+        msg = f"Xe da ra bai. Phi gui: {parking_fee:,}"
+        if charging_fee > 0:
+            msg += f" + sac: {charging_fee:,}"
+        msg += f" = Tong: {total_fee:,} VND"
+        return ok({"total_fee": total_fee}, msg)
     except Exception as e:
         conn.rollback()
         return err(f"Loi: {e}")
@@ -513,11 +788,10 @@ def admin_get_active_charging():
     finally:
         conn.close()
 
-def admin_confirm_end_charging(order_id, kwh_consumed):
+def admin_confirm_end_charging(order_id, kwh_consumed=0):
     conn = get_db()
     cur  = conn.cursor()
     try:
-        kwh_consumed = max(0.0, float(kwh_consumed or 0))
         cur.execute(
             "SELECT * FROM charging_orders WHERE id=%s AND status='active'", (order_id,)
         )
@@ -526,19 +800,29 @@ def admin_confirm_end_charging(order_id, kwh_consumed):
             return err("Don sac khong ton tai hoac da hoan tat.")
 
         t_end = now_str()
-        fee   = calculate_charging_fee(order["charge_type"], kwh_consumed)
+        fee   = calculate_charging_fee_by_time(order["time_start"], t_end)
 
         cur.execute(
-            "UPDATE charging_orders SET time_end=%s,kwh_consumed=%s,total_fee=%s,status='completed' WHERE id=%s",
-            (t_end, kwh_consumed, fee, order_id)
+            "UPDATE charging_orders SET time_end=%s,kwh_consumed=0,total_fee=%s,status='completed' WHERE id=%s",
+            (t_end, fee, order_id)
         )
         cur.execute("UPDATE charging_stations SET status='available' WHERE id=%s", (order["station_id"],))
         cur.execute(
             "INSERT INTO payments (order_type,order_id,amount,paid_at) VALUES ('charging',%s,%s,%s)",
             (order_id, fee, t_end)
         )
+
+        # Trừ tiền ví user
+        if fee > 0:
+            wallet_deduct(
+                order["user_id"], fee,
+                f"Admin ket thuc sac: {fee:,} VND",
+                ref_type='charging', ref_id=order_id,
+                conn=conn, cur=cur
+            )
+
         conn.commit()
-        return ok({"total_fee": fee}, f"Ket thuc sac. Phi: {fee:,} VND")
+        return ok({"total_fee": fee}, f"Ket thuc sac. Phi: {fee:,} VND (tru tu vi)")
     except Exception as e:
         conn.rollback()
         return err(f"Loi: {e}")

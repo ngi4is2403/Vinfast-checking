@@ -1,0 +1,326 @@
+{% extends "base.html" %}
+{% block title %}Báo cáo tháng — Admin ParkEV{% endblock %}
+{% block page_title %}Báo cáo tháng {{ month }}/{{ year }}{% endblock %}
+{% block page_subtitle %}Tổng hợp doanh thu, hoạt động và hiệu suất bãi đỗ{% endblock %}
+
+{% block page_actions %}
+<form method="GET" class="month-nav">
+  <select name="month" class="form-control">
+    {% for m in range(1,13) %}
+    <option value="{{ m }}" {% if m==month %}selected{% endif %}>Tháng {{ m }}</option>
+    {% endfor %}
+  </select>
+  <select name="year" class="form-control">
+    {% for y in [2024,2025,2026] %}
+    <option value="{{ y }}" {% if y==year %}selected{% endif %}>{{ y }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit" class="btn btn-primary">📊 Xem báo cáo</button>
+</form>
+{% endblock %}
+
+{% block content %}
+
+{% set rev = report.revenue %}
+{% set act = report.activity %}
+{% set occ = report.occupancy %}
+{% set cust = report.customers %}
+
+<!-- ── Revenue KPIs ── -->
+<div class="stats-grid" style="margin-bottom:24px;">
+  <div class="stat-card">
+    <div class="stat-icon green">💰</div>
+    <div>
+      <div class="stat-value" style="font-size:20px;">{{ '{:,.0f}'.format(rev.total_revenue or 0) }}đ</div>
+      <div class="stat-label">Tổng doanh thu</div>
+      {% if rev.revenue_change_pct is not none %}
+      <div class="stat-change {% if (rev.revenue_change_pct or 0) >= 0 %}up{% else %}down{% endif %}">
+        {{ '+' if (rev.revenue_change_pct or 0) >= 0 else '' }}{{ rev.revenue_change_pct }}% so với tháng trước
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon cyan">🅿️</div>
+    <div>
+      <div class="stat-value" style="font-size:20px;">{{ '{:,.0f}'.format(rev.parking_revenue or 0) }}đ</div>
+      <div class="stat-label">Doanh thu gửi xe</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon violet">⚡</div>
+    <div>
+      <div class="stat-value" style="font-size:20px;">{{ '{:,.0f}'.format(rev.charging_revenue or 0) }}đ</div>
+      <div class="stat-label">Doanh thu sạc xe</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon purple">👥</div>
+    <div>
+      <div class="stat-value">{{ act.active_customers or 0 }}</div>
+      <div class="stat-label">Khách hoạt động</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon amber">🚗</div>
+    <div>
+      <div class="stat-value">{{ act.parking_checkins or 0 }}</div>
+      <div class="stat-label">Lượt gửi xe</div>
+      {% if act.checkins_change_pct is not none %}
+      <div class="stat-change {% if (act.checkins_change_pct or 0) >= 0 %}up{% else %}down{% endif %}">
+        {{ '+' if (act.checkins_change_pct or 0) >= 0 else '' }}{{ act.checkins_change_pct }}%
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon green">⚡</div>
+    <div>
+      <div class="stat-value">{{ act.charging_sessions or 0 }}</div>
+      <div class="stat-label">Lượt sạc</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Revenue Chart + Activity ── -->
+<div class="grid-2" style="margin-bottom:24px;">
+
+  <!-- Revenue chart -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-title">📈 Doanh thu theo ngày</div>
+        <div class="card-subtitle">Tháng {{ month }}/{{ year }}</div>
+      </div>
+    </div>
+    <div class="chart-container">
+      <canvas id="revenueChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Activity breakdown -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">📋 Tổng hoạt động tháng</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:14px;margin-top:8px;">
+      {% set metrics = [
+      ('🅿️', 'Lượt gửi xe', act.parking_checkins or 0, 'badge-cyan'),
+      ('🚪', 'Lượt lấy xe', act.parking_checkouts or 0, 'badge-green'),
+      ('⚡', 'Phiên sạc', act.charging_sessions or 0, 'badge-violet'),
+      ('🔋', 'Tổng kWh sạc', act.total_kwh or 0, 'badge-amber'),
+      ('🚗', 'Phương tiện hoạt động', act.active_vehicles or 0, 'badge-blue'),
+      ] %}
+      {% for icon, label, val, badge in metrics %}
+      <div
+        style="display:flex;align-items:center;justify-content:space-between;padding:10px;background:var(--bg-card2);border-radius:var(--radius-sm);">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:18px;">{{ icon }}</span>
+          <span style="font-size:13px;color:var(--text-dim);">{{ label }}</span>
+        </div>
+        <span class="badge {{ badge }}" style="font-size:13px;padding:4px 12px;">{{ val }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- ── Occupancy + Customer ── -->
+<div class="grid-2" style="margin-bottom:24px;">
+  <!-- Occupancy -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">🅿️ Hiệu suất bãi đỗ</div>
+    </div>
+    <div style="text-align:center;padding:16px 0;">
+      <div style="font-size:52px;font-weight:800;color:var(--primary);">{{ occ.occupancy_rate or 0 }}%</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-top:4px;">Tỷ lệ lấp đầy trung bình</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;">
+      <div style="background:var(--bg-card2);border-radius:var(--radius-sm);padding:12px;text-align:center;">
+        <div style="font-size:22px;font-weight:700;color:var(--secondary);">{{ occ.zone_a_usage or 0 }}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Khu A (không sạc)</div>
+      </div>
+      <div style="background:var(--bg-card2);border-radius:var(--radius-sm);padding:12px;text-align:center;">
+        <div style="font-size:22px;font-weight:700;color:var(--electric);">{{ occ.zone_b_usage or 0 }}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Khu B (có sạc)</div>
+      </div>
+    </div>
+
+    {% if occ.peak_hours %}
+    <div style="margin-top:16px;">
+      <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;">⏰
+        Giờ cao điểm</div>
+      {% for h in occ.peak_hours %}
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <span style="font-size:13px;">🕐 {{ h.hour }}:00 — {{ h.hour }}:59</span>
+        <span class="badge badge-amber">{{ h.cnt }} lượt</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if occ.top_stations %}
+    <div style="margin-top:12px;">
+      <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;">⚡
+        Trụ sạc sử dụng nhiều</div>
+      {% for s in occ.top_stations %}
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:13px;">
+        <span>{{ s.station_code }} ({{ s.station_type }})</span>
+        <span class="badge badge-violet">{{ s.usage_count }} lần</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Customer stats -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">👥 Thống kê khách hàng</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+      <div style="background:var(--bg-card2);border-radius:var(--radius-sm);padding:14px;text-align:center;">
+        <div style="font-size:28px;font-weight:800;color:var(--success);">{{ cust.new_customers or 0 }}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">Khách hàng mới</div>
+      </div>
+      <div style="background:var(--bg-card2);border-radius:var(--radius-sm);padding:14px;text-align:center;">
+        <div style="font-size:28px;font-weight:800;color:var(--secondary);">{{ cust.returning_customers or 0 }}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">Khách quay lại</div>
+      </div>
+      <div style="background:var(--bg-card2);border-radius:var(--radius-sm);padding:14px;text-align:center;">
+        <div style="font-size:28px;font-weight:800;color:var(--primary);">{{ cust.total_customers or 0 }}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">Tổng khách hàng</div>
+      </div>
+      <div style="background:var(--bg-card2);border-radius:var(--radius-sm);padding:14px;text-align:center;">
+        <div style="font-size:28px;font-weight:800;color:var(--electric);">{{ cust.charge_ratio or 0 }}%</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">Tỷ lệ dùng sạc</div>
+      </div>
+    </div>
+
+    {% if cust.top_customers %}
+    <div>
+      <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:10px;text-transform:uppercase;">
+        🏆 Top khách hàng chi tiêu</div>
+      {% for c in cust.top_customers %}
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">
+        <div
+          style="width:28px;height:28px;border-radius:8px;background:var(--primary-glow);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--primary);">
+          {{ loop.index }}
+        </div>
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:600;">{{ c.full_name }}</div>
+          <div style="font-size:11px;color:var(--text-muted);">{{ c.phone }}</div>
+        </div>
+        <div style="font-size:13px;font-weight:700;color:var(--success);">
+          {{ '{:,.0f}'.format(c.total_spent) }}đ
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Revenue type chart -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">🥧 Cơ cấu doanh thu tháng {{ month }}/{{ year }}</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:40px;flex-wrap:wrap;padding:10px 0;">
+    <div style="flex:1;max-width:260px;">
+      <canvas id="pieChart" height="220"></canvas>
+    </div>
+    <div style="flex:1;">
+      <div style="margin-bottom:16px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+          <div style="width:14px;height:14px;border-radius:3px;background:#6366f1;"></div>
+          <span style="font-size:13px;">Gửi xe</span>
+          <strong style="margin-left:auto;">{{ '{:,.0f}'.format(rev.parking_revenue or 0) }}đ</strong>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="width:14px;height:14px;border-radius:3px;background:#a78bfa;"></div>
+          <span style="font-size:13px;">Sạc xe</span>
+          <strong style="margin-left:auto;">{{ '{:,.0f}'.format(rev.charging_revenue or 0) }}đ</strong>
+        </div>
+      </div>
+      <div style="padding:14px;background:var(--bg-card2);border-radius:var(--radius-sm);">
+        <div style="font-size:12px;color:var(--text-muted);">Tổng tháng {{ month }}/{{ year }}</div>
+        <div style="font-size:24px;font-weight:800;color:var(--success);margin-top:4px;">
+          {{ '{:,.0f}'.format(rev.total_revenue or 0) }}đ
+        </div>
+        {% if rev.prev_month_revenue %}
+        <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">
+          Tháng trước: {{ '{:,.0f}'.format(rev.prev_month_revenue) }}đ
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+  const DAILY = {{ (report.revenue.daily_revenue or[]) | tojson }};
+
+  // Revenue line chart
+  const labels = DAILY.map(d => 'N' + d.day);
+  const parkingData = DAILY.map(d => d.parking || 0);
+  const chargingData = DAILY.map(d => d.charging || 0);
+
+  new Chart(document.getElementById('revenueChart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Gửi xe',
+          data: parkingData,
+          backgroundColor: 'rgba(99,102,241,.7)',
+          borderRadius: 4,
+        },
+        {
+          label: 'Sạc xe',
+          data: chargingData,
+          backgroundColor: 'rgba(167,139,250,.7)',
+          borderRadius: 4,
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#94a3b8', font: { size: 12 } } } },
+      scales: {
+        x: { stacked: true, ticks: { color: '#64748b' }, grid: { color: 'rgba(255,255,255,.05)' } },
+        y: { stacked: true, ticks: { color: '#64748b', callback: v => (v / 1000) + 'k' }, grid: { color: 'rgba(255,255,255,.05)' } }
+      }
+    }
+  });
+
+  // Pie chart
+  const parkingRev = {{ report.revenue.parking_revenue or 0 }};
+  const chargingRev = {{ report.revenue.charging_revenue or 0 }};
+  new Chart(document.getElementById('pieChart'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Gửi xe', 'Sạc xe'],
+      datasets: [{
+        data: [parkingRev, chargingRev],
+        backgroundColor: ['#6366f1', '#a78bfa'],
+        borderWidth: 0,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ctx.label + ': ' + ctx.raw.toLocaleString('vi') + 'đ' } }
+      },
+      cutout: '65%',
+    }
+  });
+</script>
+{% endblock %}

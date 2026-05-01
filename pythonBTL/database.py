@@ -19,7 +19,8 @@ import pymysql.cursors
 import hashlib
 from datetime import datetime, timedelta
 from config import (DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME,
-                    PARKING_RATES, CHARGING_RATES)
+                    PARKING_RATES, CHARGING_RATES, DEFAULT_WALLET_BALANCE,
+                    CHARGING_RATE_PER_HOUR)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # HELPER: Chuyển đổi kiểu dữ liệu
@@ -108,6 +109,7 @@ TABLES = [
         email         VARCHAR(255) NOT NULL UNIQUE,    -- Email (cũng dùng để đăng nhập)
         password_hash VARCHAR(64)  NOT NULL,            -- SHA-256 hash, không lưu plain text
         role          ENUM('user','admin','director') NOT NULL DEFAULT 'user',
+        balance       INT NOT NULL DEFAULT 0,           -- Số dư ví tiền (VNĐ)
         created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     """,
@@ -156,11 +158,11 @@ TABLES = [
     """
     CREATE TABLE IF NOT EXISTS charging_stations (
         id           INT AUTO_INCREMENT PRIMARY KEY,
-        station_code VARCHAR(10) NOT NULL UNIQUE,       -- Ví dụ: CS01, CS05
-        station_type ENUM('slow','fast') NOT NULL,
-        power_kw     FLOAT NOT NULL,                    -- Công suất đầu ra (kW)
+        station_code VARCHAR(20) NOT NULL UNIQUE,
+        station_type VARCHAR(20) NOT NULL DEFAULT 'standard',  -- Loại trụ (đơn giản, không phân biệt nhanh/chậm)
+        power_kw     DECIMAL(6,1) NOT NULL DEFAULT 7.4,         -- Công suất sạc (kW)
         status       ENUM('available','busy','maintenance') NOT NULL DEFAULT 'available',
-        area         VARCHAR(50) NOT NULL DEFAULT 'Khu B'
+        area         VARCHAR(50) DEFAULT 'Khu B'
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     """,
 
@@ -195,7 +197,7 @@ TABLES = [
         user_id      INT NOT NULL,
         vehicle_id   INT NOT NULL,
         station_id   INT NOT NULL,
-        charge_type  ENUM('slow','fast') NOT NULL,
+        charge_type  VARCHAR(20) NOT NULL DEFAULT 'standard',
         time_start   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         time_end     DATETIME,                          -- NULL khi đang sạc
         kwh_consumed FLOAT DEFAULT 0,                   -- Số kWh thực tế đã sạc
@@ -217,8 +219,90 @@ TABLES = [
         order_type ENUM('parking','charging') NOT NULL,  -- Loại dịch vụ
         order_id   INT NOT NULL,                          -- ID của đơn tương ứng
         amount     INT NOT NULL,                          -- Số tiền thu (VNĐ)
-        method     VARCHAR(20) NOT NULL DEFAULT 'cash',   -- Phương thức: cash, card...
+        method     VARCHAR(20) NOT NULL DEFAULT 'wallet', -- Phương thức: wallet, cash...
         paid_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP  -- Thời điểm thanh toán
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
+
+    # ── Bảng giao dịch ví tiền ──────────────────────────────────────────
+    # Ghi lại mỗi lần nạp/rút/trừ tiền ví.
+    # tx_type: topup (nạp), withdraw (rút), payment (trừ khi thanh toán dịch vụ)
+    """
+    CREATE TABLE IF NOT EXISTS wallet_transactions (
+        id          INT AUTO_INCREMENT PRIMARY KEY,
+        user_id     INT NOT NULL,
+        tx_type     ENUM('topup','withdraw','payment') NOT NULL,
+        amount      INT NOT NULL,                          -- Số tiền (luôn dương)
+        balance_after INT NOT NULL,                        -- Số dư sau giao dịch
+        description VARCHAR(255),                          -- Mô tả giao dịch
+        ref_type    VARCHAR(20),                           -- 'parking' hoặc 'charging' (nếu payment)
+        ref_id      INT,                                   -- ID đơn hàng (nếu payment)
+        created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
+
+    # ── Bảng quản lý thu/chi của bãi xe ─────────────────────────────────
+    # Admin ghi nhận các khoản thu/chi hàng ngày.
+    # entry_type: 'income' (thu) hoặc 'expense' (chi)
+    # category: nhu 'parking', 'charging', 'repair', 'electricity', 'salary', 'other'
+    """
+    CREATE TABLE IF NOT EXISTS finance_entries (
+        id          INT AUTO_INCREMENT PRIMARY KEY,
+        entry_type  ENUM('income','expense') NOT NULL,
+        category    VARCHAR(50) NOT NULL,
+        amount      INT NOT NULL,
+        description VARCHAR(255),
+        entry_date  DATE NOT NULL,
+        created_by  INT,                                   -- Admin ID tạo bút toán
+        created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
+
+    # ── Bảng yêu cầu nạp tiền qua QR ──────────────────────────────────
+    # User tạo yêu cầu nạp → hệ thống tạo QR → user chuyển khoản
+    # Admin xác nhận → cộng tiền ví
+    # status: pending (chờ) → confirmed (đã duyệt) | rejected (từ chối)
+    """
+    CREATE TABLE IF NOT EXISTS pending_topups (
+        id          INT AUTO_INCREMENT PRIMARY KEY,
+        user_id     INT NOT NULL,
+        amount      INT NOT NULL,
+        ref_code    VARCHAR(30) NOT NULL UNIQUE,           -- Mã CK duy nhất: PARKEV-{uid}-{random}
+        status      ENUM('pending','confirmed','rejected') NOT NULL DEFAULT 'pending',
+        confirmed_by INT,                                  -- Admin ID xác nhận
+        confirmed_at DATETIME,
+        note        VARCHAR(255),                          -- Ghi chú (lý do từ chối...)
+        created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id)     REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (confirmed_by) REFERENCES users(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
+
+    # ── Bảng đặt lịch trước ─────────────────────────────────────────
+    # User đặt chỗ trước, trả tiền ngay, đến check-in trong 10 phút
+    # Nếu no-show → phạt 30%, hoàn 70%
+    """
+    CREATE TABLE IF NOT EXISTS bookings (
+        id              INT AUTO_INCREMENT PRIMARY KEY,
+        user_id         INT NOT NULL,
+        vehicle_id      INT NOT NULL,
+        slot_id         INT NOT NULL,
+        scheduled_time  DATETIME NOT NULL,
+        duration_hours  FLOAT NOT NULL DEFAULT 1,
+        total_fee       INT NOT NULL DEFAULT 0,
+        penalty_fee     INT NOT NULL DEFAULT 0,
+        refund_fee      INT NOT NULL DEFAULT 0,
+        status          ENUM('pending','active','completed','no_show','cancelled')
+                        NOT NULL DEFAULT 'pending',
+        notes           TEXT,
+        created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        checkin_at      DATETIME,
+        checkout_at     DATETIME,
+        FOREIGN KEY (user_id)    REFERENCES users(id),
+        FOREIGN KEY (vehicle_id) REFERENCES vehicles(id),
+        FOREIGN KEY (slot_id)    REFERENCES parking_slots(id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     """,
 ]
@@ -237,22 +321,26 @@ def seed_data(conn):
     # ── Tài khoản mẫu (5 người, 3 vai trò) ────────────────────────────────────
     # Format: (full_name, phone, email, password, role)
     accounts = [
-        ("Nguyen Van An",  "0901111111", "user@demo.com",     "123456", "user"),
-        ("Tran Thi Binh",  "0902222222", "user2@demo.com",    "123456", "user"),
-        ("Le Van Cuong",   "0903333333", "user3@demo.com",    "123456", "user"),
-        ("Admin Bai Do",   "0909000001", "admin@demo.com",    "123456", "admin"),
-        ("Tong Giam Doc",  "0909000002", "director@demo.com", "123456", "director"),
+        ("Nguyen Van An",    "0901234567", "user@demo.com",      "123456", "user"),
+        ("Tran Thi Binh",    "0907654321", "user2@demo.com",     "123456", "user"),
+        ("Le Van Cuong",     "0912345678", "user3@demo.com",     "123456", "user"),
+        ("Pham Quang Dung",  "0900000001", "admin@demo.com",     "123456", "admin"),
     ]
     user_ids = {}   # Lưu mapping email → id để dùng cho bước sau
     for full_name, phone, email, pwd, role in accounts:
         cur.execute(
-            "INSERT IGNORE INTO users (full_name,phone,email,password_hash,role) VALUES (%s,%s,%s,%s,%s)",
-            (full_name, phone, email, hash_password(pwd), role)
+            "INSERT IGNORE INTO users (full_name,phone,email,password_hash,role,balance) VALUES (%s,%s,%s,%s,%s,%s)",
+            (full_name, phone, email, hash_password(pwd), role, DEFAULT_WALLET_BALANCE)
         )
         cur.execute("SELECT id FROM users WHERE email=%s", (email,))
         row = cur.fetchone()
         if row:
             user_ids[email] = row["id"]
+            # Tạo giao dịch nạp tiền ban đầu cho ví
+            cur.execute(
+                "INSERT IGNORE INTO wallet_transactions (user_id,tx_type,amount,balance_after,description) VALUES (%s,'topup',%s,%s,'Nap tien khi tao tai khoan demo')",
+                (row['id'], DEFAULT_WALLET_BALANCE, DEFAULT_WALLET_BALANCE)
+            )
 
     # ── Phương tiện mẫu (6 xe, mix xăng + điện) ───────────────────────────────
     # Mỗi user có 2 xe để demo đủ tình huống gửi + sạc
@@ -375,17 +463,18 @@ def seed_data(conn):
     def make_charging_history(email, plate, station_code, days_ago, kwh, charge_type):
         """
         Tạo 1 đơn sạc hoàn thành trong quá khứ.
-        Phí = phí giữ chỗ + kwh × đơn giá
+        Phí tính theo thời gian: ceil(giờ) × CHARGING_RATE_PER_HOUR
         """
         uid = user_ids.get(email)
         vid = veh_ids.get(plate)
         sid = station_ids.get(station_code)
         if not uid or not vid or not sid:
             return
-        rate_kwh = CHARGING_RATES[charge_type]
-        fee = int(CHARGING_RATES["reservation_fee"] + kwh * rate_kwh)
+        # Tính thời gian sạc từ kwh (giả lập: ~7kW/h)
+        hours = kwh / 7.0
         t_start = datetime.now() - timedelta(days=days_ago, hours=2)
-        t_end   = t_start + timedelta(hours=kwh / 7 if charge_type == "slow" else kwh / 50)
+        t_end   = t_start + timedelta(hours=hours)
+        fee = int(math.ceil(hours) * CHARGING_RATE_PER_HOUR)
         cur.execute(
             """INSERT INTO charging_orders
                (user_id,vehicle_id,station_id,charge_type,time_start,time_end,kwh_consumed,total_fee,status)
@@ -424,16 +513,16 @@ def seed_data(conn):
 
     # Tạo lịch sử sạc xe: (email, biển số, trụ_sạc, ngày_trước, kWh, loại_sạc)
     charging_history = [
-        ("user@demo.com",  "51A-67890", "CS01", 1,  20.5, "slow"),
-        ("user@demo.com",  "51A-67890", "CS04", 3,  35.0, "fast"),
-        ("user2@demo.com", "51B-22222", "CS02", 2,  3.5,  "slow"),
-        ("user3@demo.com", "51C-33333", "CS05", 4,  40.0, "fast"),
-        ("user3@demo.com", "51C-33333", "CS03", 7,  25.0, "slow"),
-        ("user@demo.com",  "51A-67890", "CS06", 10, 50.0, "fast"),
-        ("user3@demo.com", "51C-33333", "CS01", 15, 30.0, "slow"),
-        ("user@demo.com",  "51A-67890", "CS04", 20, 45.0, "fast"),
-        ("user2@demo.com", "51B-22222", "CS02", 22, 2.0,  "slow"),
-        ("user3@demo.com", "51C-33333", "CS05", 25, 60.0, "fast"),
+        ("user@demo.com",  "51A-67890", "CS01", 1,  20.5, "standard"),
+        ("user@demo.com",  "51A-67890", "CS04", 3,  35.0, "standard"),
+        ("user2@demo.com", "51B-22222", "CS02", 2,  3.5,  "standard"),
+        ("user3@demo.com", "51C-33333", "CS05", 4,  40.0, "standard"),
+        ("user3@demo.com", "51C-33333", "CS03", 7,  25.0, "standard"),
+        ("user@demo.com",  "51A-67890", "CS06", 10, 50.0, "standard"),
+        ("user3@demo.com", "51C-33333", "CS01", 15, 30.0, "standard"),
+        ("user@demo.com",  "51A-67890", "CS04", 20, 45.0, "standard"),
+        ("user2@demo.com", "51B-22222", "CS02", 22, 2.0,  "standard"),
+        ("user3@demo.com", "51C-33333", "CS05", 25, 60.0, "standard"),
     ]
     for email, plate, station_code, days, kwh, ctype in charging_history:
         make_charging_history(email, plate, station_code, days, kwh, ctype)
@@ -475,6 +564,60 @@ def init_db():
         for ddl in TABLES:
             cur.execute(ddl)
         conn.commit()
+
+        # Bước 2.5: Migration — thêm cột balance nếu DB cũ chưa có
+        try:
+            cur.execute("SELECT balance FROM users LIMIT 1")
+        except Exception:
+            print("[DB] Migration: Adding 'balance' column to users table...")
+            cur.execute(f"ALTER TABLE users ADD COLUMN balance INT NOT NULL DEFAULT 0")
+            cur.execute(f"UPDATE users SET balance={DEFAULT_WALLET_BALANCE} WHERE balance=0")
+            conn.commit()
+            print("[DB] Migration complete.")
+
+        # Bước 2.6: Migration — tạo bảng bookings nếu chưa có
+        try:
+            cur.execute("SELECT id FROM bookings LIMIT 1")
+        except Exception:
+            print("[DB] Migration: Creating 'bookings' table...")
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS bookings (
+                    id              INT AUTO_INCREMENT PRIMARY KEY,
+                    user_id         INT NOT NULL,
+                    vehicle_id      INT NOT NULL,
+                    slot_id         INT NOT NULL,
+                    scheduled_time  DATETIME NOT NULL,
+                    duration_hours  FLOAT NOT NULL DEFAULT 1,
+                    total_fee       INT NOT NULL DEFAULT 0,
+                    penalty_fee     INT NOT NULL DEFAULT 0,
+                    refund_fee      INT NOT NULL DEFAULT 0,
+                    status          ENUM('pending','active','completed','no_show','cancelled')
+                                    NOT NULL DEFAULT 'pending',
+                    notes           TEXT,
+                    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    checkin_at      DATETIME,
+                    checkout_at     DATETIME,
+                    FOREIGN KEY (user_id)    REFERENCES users(id),
+                    FOREIGN KEY (vehicle_id) REFERENCES vehicles(id),
+                    FOREIGN KEY (slot_id)    REFERENCES parking_slots(id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """)
+            conn.commit()
+            print("[DB] Migration: bookings table created.")
+
+        # Bước 2.7: Migration — thêm cột booking_id vào parking_orders
+        try:
+            cur.execute("SELECT booking_id FROM parking_orders LIMIT 1")
+        except Exception:
+            print("[DB] Migration: Adding 'booking_id' to parking_orders...")
+            cur.execute(
+                "ALTER TABLE parking_orders "
+                "ADD COLUMN booking_id INT DEFAULT NULL, "
+                "ADD COLUMN early_fee INT NOT NULL DEFAULT 0, "
+                "ADD COLUMN booking_credit INT NOT NULL DEFAULT 0"
+            )
+            conn.commit()
+            print("[DB] Migration: parking_orders updated.")
 
         # Bước 3: Kiểm tra và seed nếu DB mới trống
         cur.execute("SELECT COUNT(*) as cnt FROM users")

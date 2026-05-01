@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block title %}Ví tiền — ParkEV{% endblock %}
+{% block page_title %}Ví tiền{% endblock %}
+{% block page_subtitle %}Nạp, rút và theo dõi số dư{% endblock %}
+
+{% block content %}
+<!-- Số dư -->
+<div class="stats-grid" style="margin-bottom:24px;">
+  <div class="stat-card" style="background:linear-gradient(135deg, var(--bg-card), var(--bg-card2));border-color:var(--primary);">
+    <div class="stat-icon purple">💰</div>
+    <div>
+      <div class="stat-value" style="font-size:28px;color:var(--primary);">{{ '{:,.0f}'.format(balance) }}đ</div>
+      <div class="stat-label">Số dư ví hiện tại</div>
+    </div>
+  </div>
+</div>
+
+<div class="grid-2" style="align-items:start;">
+  <!-- Nạp tiền qua QR -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">💳 Nạp tiền (Chuyển khoản QR)</div>
+    </div>
+    <form method="POST" action="{{ url_for('user_wallet_topup') }}">
+      <div class="form-group">
+        <label class="form-label">Số tiền nạp (VNĐ)</label>
+        <input name="amount" type="number" min="10000" step="10000" class="form-control"
+               placeholder="Nhập số tiền..." required id="topup-amount">
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+        <button type="button" class="btn btn-outline btn-sm preset-btn" data-amount="50000" data-target="topup-amount">50k</button>
+        <button type="button" class="btn btn-outline btn-sm preset-btn" data-amount="100000" data-target="topup-amount">100k</button>
+        <button type="button" class="btn btn-outline btn-sm preset-btn" data-amount="200000" data-target="topup-amount">200k</button>
+        <button type="button" class="btn btn-outline btn-sm preset-btn" data-amount="500000" data-target="topup-amount">500k</button>
+        <button type="button" class="btn btn-outline btn-sm preset-btn" data-amount="1000000" data-target="topup-amount">1M</button>
+      </div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;padding:8px 10px;background:rgba(167,139,250,.08);border-radius:var(--radius-sm);">
+        💡 Sau khi nhấn nạp, hệ thống sẽ tạo mã QR chuyển khoản.<br>
+        Quét QR → chuyển khoản → chờ admin xác nhận → tiền sẽ vào ví.
+      </div>
+      <button type="submit" class="btn btn-success btn-block">
+        📱 Tạo mã QR nạp tiền
+      </button>
+    </form>
+  </div>
+
+  <!-- Rút tiền -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">🏧 Rút tiền</div>
+    </div>
+    <form method="POST" action="{{ url_for('user_wallet_withdraw') }}">
+      <div class="form-group">
+        <label class="form-label">Số tiền rút (VNĐ)</label>
+        <input name="amount" type="number" min="10000" step="10000" class="form-control"
+               placeholder="Nhập số tiền..." required id="withdraw-amount">
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+        <button type="button" class="btn btn-outline btn-sm preset-btn" data-amount="50000" data-target="withdraw-amount">50k</button>
+        <button type="button" class="btn btn-outline btn-sm preset-btn" data-amount="100000" data-target="withdraw-amount">100k</button>
+        <button type="button" class="btn btn-outline btn-sm preset-btn" data-amount="200000" data-target="withdraw-amount">200k</button>
+      </div>
+      <button type="submit" class="btn btn-warning btn-block"
+              data-confirm-btn="Xác nhận rút tiền khỏi ví?">
+        🏧 Rút tiền
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- Yêu cầu nạp tiền gần đây -->
+{% if pending %}
+<div class="card" style="margin-top:20px;">
+  <div class="card-header">
+    <div class="card-title">📱 Yêu cầu nạp tiền</div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Thời gian</th>
+          <th>Số tiền</th>
+          <th>Mã CK</th>
+          <th>Trạng thái</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in pending %}
+          <tr>
+            <td style="font-size:12px;color:var(--text-muted);">{{ t.created_at }}</td>
+            <td style="font-weight:700;color:var(--primary);">{{ '{:,.0f}'.format(t.amount) }}đ</td>
+            <td><code style="font-size:12px;color:var(--electric);">{{ t.ref_code }}</code></td>
+            <td>
+              {% if t.status == 'pending' %}
+                <span class="badge badge-amber">⏳ Chờ duyệt</span>
+              {% elif t.status == 'confirmed' %}
+                <span class="badge badge-green">✅ Đã nạp</span>
+              {% else %}
+                <span class="badge badge-red">❌ Từ chối</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if t.status == 'pending' %}
+                <a href="{{ url_for('user_wallet_qr', tid=t.id) }}" class="btn btn-outline btn-xs">Xem QR</a>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- Lịch sử giao dịch ví -->
+<div class="card" style="margin-top:20px;">
+  <div class="card-header">
+    <div class="card-title">📋 Lịch sử giao dịch ví</div>
+    <div class="card-subtitle">20 giao dịch gần nhất</div>
+  </div>
+  {% if history %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Thời gian</th>
+            <th>Loại</th>
+            <th>Số tiền</th>
+            <th>Số dư sau</th>
+            <th>Mô tả</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for tx in history %}
+            <tr>
+              <td style="font-size:12px;color:var(--text-muted);">{{ tx.created_at }}</td>
+              <td>
+                {% if tx.tx_type == 'topup' %}
+                  <span class="badge badge-green">➕ Nạp</span>
+                {% elif tx.tx_type == 'withdraw' %}
+                  <span class="badge badge-amber">➖ Rút</span>
+                {% else %}
+                  <span class="badge badge-violet">💳 Thanh toán</span>
+                {% endif %}
+              </td>
+              <td style="font-weight:700;{{ 'color:var(--success);' if tx.tx_type == 'topup' else 'color:var(--danger);' }}">
+                {{ '+' if tx.tx_type == 'topup' else '-' }}{{ '{:,.0f}'.format(tx.amount) }}đ
+              </td>
+              <td style="font-weight:600;">{{ '{:,.0f}'.format(tx.balance_after) }}đ</td>
+              <td style="font-size:12px;color:var(--text-muted);">{{ tx.description or '—' }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <div class="empty-icon">💰</div>
+      <p>Chưa có giao dịch nào.</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('.preset-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const target = document.getElementById(btn.dataset.target);
+    if (target) target.value = btn.dataset.amount;
+  });
+});
+</script>
+{% endblock %}
