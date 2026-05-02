@@ -46,6 +46,9 @@ from modules.booking_service import (create_booking, get_user_bookings, get_book
                                       auto_mark_no_show, auto_activate_pending_bookings,
                                       fix_booking_integrity,
                                       admin_get_all_bookings, admin_checkin_booking, admin_cancel_booking)
+from modules.battery_service import (create_battery_order, get_user_battery_orders,
+                                      admin_get_all_battery_orders,
+                                      BATTERY_PRICES, SWAP_PRICES, SWAP_LABELS)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # KHỞI TẠO ỨNG DỤNG FLASK
@@ -573,6 +576,47 @@ def api_slots_available():
     """API lấy slot đồng thời cho đặt lịch (lọc theo loại xe)."""
     vtype = request.args.get("vehicle_type", "")
     return jsonify(get_available_slots(vtype))
+
+
+# ── Mua pin / Đổi pin xe điện ────────────────────────────────────────────────
+
+@app.route("/user/battery", methods=["GET", "POST"])
+@role_required("user")
+def user_battery():
+    """
+    GET  → Trang dịch vụ pin: mua pin mới hoặc đổi pin nhanh (không cần chờ sạc)
+    POST → Xử lý đơn:
+           mode='new_purchase' : mua pin mới, giá theo loại xe
+           mode='swap'         : đổi pin nhanh, giá theo % dượng lượng nhận
+    """
+    uid      = session["user_id"]
+    all_vehs = get_vehicles(uid)["data"]
+    ev_vehs  = [v for v in all_vehs
+                if v["vehicle_type"] in ("e_motorcycle", "e_car")]
+
+    if request.method == "POST":
+        vid        = int(request.form.get("vehicle_id", 0) or 0)
+        mode       = request.form.get("mode", "new_purchase")   # 'new_purchase' | 'swap'
+        charge_pct = int(request.form.get("charge_pct", 100) or 100)
+        notes      = request.form.get("notes", "")
+
+        result = create_battery_order(uid, vid, mode, charge_pct, notes)
+        flash(result["message"], "success" if result["success"] else "danger")
+        if result["success"]:
+            return redirect(url_for("user_battery"))
+
+    orders  = get_user_battery_orders(uid)["data"]
+    balance = get_wallet_balance(uid)
+    return render_template(
+        "user/battery.html",
+        vehicles=ev_vehs,
+        orders=orders,
+        balance=balance,
+        battery_prices=BATTERY_PRICES,
+        swap_prices=SWAP_PRICES,
+        swap_labels=SWAP_LABELS,
+        vtype_labels=VEHICLE_TYPES,
+    )
 
 # =============================================================================
 # NHÓM ROUTES: ADMIN — Vận hành bãi đỗ hàng ngày

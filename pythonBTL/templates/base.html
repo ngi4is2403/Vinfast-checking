@@ -63,6 +63,10 @@
            class="nav-link {% if request.endpoint=='user_charge' %}active{% endif %}">
           <span class="nav-icon">⚡</span> Sac xe
         </a>
+        <a href="{{ url_for('user_battery') }}"
+           class="nav-link {% if request.endpoint=='user_battery' %}active{% endif %}">
+          <span class="nav-icon">🔋</span> Mua/Doi pin
+        </a>
         <a href="{{ url_for('user_history') }}"
            class="nav-link {% if request.endpoint=='user_history' %}active{% endif %}">
           <span class="nav-icon">📋</span> Lich su

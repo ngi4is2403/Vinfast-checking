@@ -235,18 +235,19 @@ def create_booking(user_id, vehicle_id, slot_id, scheduled_time_str, duration_ho
 
 def checkin_booking(booking_id, user_id):
     """
-    Check-in cho đặt lịch.
+    Check-in thủ công cho đặt lịch — user bấm khi đến nơi.
 
     Đến SỚM (trước scheduled_time):
       → Tạo parking_order THÔNG THƯỜNG (không gắn booking, tính tiền bình thường)
       → Booking vẫn giữ trạng thái 'pending'
-      → Khi lấy xe (checkout), hệ thống tự kích hoạt booking nếu đã đến giờ
 
-    Đến ĐÚNG GIỜ / MUỘN (trong khung giờ):
-      → Booking check-in thật sự, tạo parking_order có booking_credit
+    Đến ĐÚNG GIỜ / MUỘN (trong khung giờ scheduled_time → expire_at):
+      → Tạo parking_order gắn booking_credit = total_fee đã trả
       → Booking chuyển sang 'active'
+      → Phí đã thanh toán lúc đặt lịch COVER toàn bộ khoảng thời gian book
+      → Chỉ tính thêm phí nếu ra bãi SAU expire_at
 
-    Hết khung giờ: không cho check-in.
+    Hết khung giờ: không cho check-in (đã no_show).
     """
     conn = get_db()
     cur  = conn.cursor()
@@ -275,7 +276,6 @@ def checkin_booking(booking_id, user_id):
 
         if now < sched:
             # ── ĐẾN SỚM: parking thông thường, booking vẫn pending ──────────
-            # Kiểm tra xe đã có parking_order active chưa (tránh tạo trùng)
             cur.execute(
                 "SELECT id FROM parking_orders WHERE vehicle_id=%s AND status='active'",
                 (bk["vehicle_id"],)
@@ -297,7 +297,6 @@ def checkin_booking(booking_id, user_id):
             )
             parking_order_id = cur.lastrowid
             cur.execute("UPDATE parking_slots SET status='occupied' WHERE id=%s", (bk["slot_id"],))
-            # Ghi lại ID order sớm vào notes để checkout biết
             cur.execute(
                 "UPDATE bookings SET notes=CONCAT(IFNULL(notes,''),' [early_order:%s]') WHERE id=%s",
                 (parking_order_id, booking_id)
@@ -310,14 +309,22 @@ def checkin_booking(booking_id, user_id):
                 f"Booking #{booking_id} van giu cho tu {str(bk['scheduled_time'])[:16]}."
             )
         else:
-            # ── ĐÚNG GIỜ / MUỘN: Booking check-in thật sự ──────────────────
+            # ── ĐÚNG GIỜ / MUỘN: Check-in thật sự, booking_credit cover phí ─
+            # Kiểm tra xe không bị trùng parking_order
+            cur.execute(
+                "SELECT id FROM parking_orders WHERE vehicle_id=%s AND status='active'",
+                (bk["vehicle_id"],)
+            )
+            if cur.fetchone():
+                return _err("Xe nay dang co don gui xe dang hoat dong.")
+
             cur.execute(
                 "INSERT INTO parking_orders "
                 "(user_id,vehicle_id,slot_id,time_in,status,unit_price,notes,booking_id,booking_credit) "
                 "VALUES (%s,%s,%s,%s,'active',%s,%s,%s,%s)",
                 (user_id, bk["vehicle_id"], bk["slot_id"],
                  _fmt(now), unit_price,
-                 f"Dat lich #{booking_id}",
+                 f"Dat lich #{booking_id} — da thanh toan",
                  booking_id, bk["total_fee"])
             )
             parking_order_id = cur.lastrowid
@@ -329,9 +336,12 @@ def checkin_booking(booking_id, user_id):
             conn.commit()
             if now > sched:
                 mins = int((now - sched).total_seconds() / 60)
-                msg = f"Check-in thanh cong (den muon {mins} phut, con trong khung gio). Booking da cover toan bo phi."
+                msg  = (f"Check-in thanh cong (den muon {mins} phut). "
+                        f"Phi dat lich da cover toan bo {bk['duration_hours']}h. "
+                        f"Chi tinh them neu ra bai sau {str(expire_at)[:16]}.")
             else:
-                msg = "Check-in thanh cong! Dung gio hen. Booking cover toan bo phi."
+                msg = (f"Check-in dung gio! Phi dat lich da thanh toan cover "
+                       f"toan bo {bk['duration_hours']}h den {str(expire_at)[:16]}.")
             return _ok({"parking_order_id": parking_order_id, "early": False}, msg)
 
     except Exception as e:
@@ -438,95 +448,15 @@ def auto_mark_no_show():
 
 def auto_activate_pending_bookings():
     """
-    Gọi mỗi lần user vào trang bookings.
-    Tìm các booking pending đã đến scheduled_time và có early parking_order active
-    → Auto-checkout phần đến sớm (chỉ tính từ time_in đến scheduled_time)
-    → Auto-activate booking (chuyển sang active, tạo parking_order mới gắn booking_credit)
+    [ĐÃ VÔ HIỆU HÓA] Không tự động activate booking nữa.
+
+    Theo yêu cầu mới:
+    - Booking đến giờ hẹn vẫn giữ trạng thái 'pending'
+    - User PHẢI bấm Check-in thủ công khi đến nơi
+    - Khi check-in trong khung giờ → booking_credit cover toàn bộ phí
+    - Hết khung giờ không check-in → no_show (xử lý bởi auto_mark_no_show)
     """
-    from modules.user_service import wallet_deduct
-    conn = get_db()
-    cur  = conn.cursor()
-    try:
-        now = _now()
-        # Booking pending đã qua scheduled_time, chưa hết expire_at
-        cur.execute("""
-            SELECT b.*, v.vehicle_type
-            FROM bookings b
-            JOIN vehicles v ON b.vehicle_id=v.id
-            WHERE b.status='pending'
-              AND b.scheduled_time <= %s
-        """, (_fmt(now),))
-        due = cur.fetchall() or []
-
-        activated = 0
-        for bk in due:
-            sched     = _to_dt(bk["scheduled_time"])
-            expire_at = sched + timedelta(hours=float(bk["duration_hours"]))
-            if now > expire_at:
-                continue  # no_show handled by auto_mark_no_show
-
-            vtype = bk["vehicle_type"]
-
-            # Tìm early parking_order có liên kết
-            cur.execute(
-                "SELECT * FROM parking_orders "
-                "WHERE vehicle_id=%s AND slot_id=%s AND status='active' "
-                "AND notes LIKE %s LIMIT 1",
-                (bk["vehicle_id"], bk["slot_id"],
-                 f"%[Den som] Dat lich #{bk['id']}%")
-            )
-            early = cur.fetchone()
-
-            if early:
-                # Tính phí phần đến sớm: từ time_in đến scheduled_time
-                early_hours = max(0.0, (sched - _to_dt(early["time_in"])).total_seconds() / 3600)
-                early_fee   = _calc_fee(vtype, early_hours)
-
-                # Auto-checkout early parking_order tại scheduled_time
-                cur.execute(
-                    "UPDATE parking_orders SET time_out=%s, status='completed', total_fee=%s WHERE id=%s",
-                    (_fmt(sched), early_fee, early["id"])
-                )
-                cur.execute(
-                    "INSERT INTO payments (order_type,order_id,amount,paid_at) VALUES ('parking',%s,%s,%s)",
-                    (early["id"], early_fee, _fmt(sched))
-                )
-                # Trừ tiền phần đến sớm từ ví
-                if early_fee > 0:
-                    deduct_result = wallet_deduct(
-                        bk["user_id"], early_fee,
-                        f"Phi gui xe som (truoc dat lich #{bk['id']}): {early_fee:,}d",
-                        ref_type='parking', ref_id=early["id"],
-                        conn=conn, cur=cur
-                    )
-
-            # Tạo parking_order mới gắn booking_credit (từ scheduled_time)
-            unit_price = PARKING_RATES[vtype]["per_hour"]
-            cur.execute(
-                "INSERT INTO parking_orders "
-                "(user_id,vehicle_id,slot_id,time_in,status,unit_price,notes,booking_id,booking_credit) "
-                "VALUES (%s,%s,%s,%s,'active',%s,%s,%s,%s)",
-                (bk["user_id"], bk["vehicle_id"], bk["slot_id"],
-                 _fmt(sched), unit_price,
-                 f"[Auto-activate] Dat lich #{bk['id']}",
-                 bk["id"], bk["total_fee"])
-            )
-            # Slot đã occupied (từ early check-in hoặc tự đảo sang occupied nếu chưa)
-            cur.execute("UPDATE parking_slots SET status='occupied' WHERE id=%s", (bk["slot_id"],))
-            cur.execute(
-                "UPDATE bookings SET status='active', checkin_at=%s WHERE id=%s",
-                (_fmt(sched), bk["id"])
-            )
-            activated += 1
-
-        if activated > 0:
-            conn.commit()
-        return _ok({"activated": activated})
-    except Exception as e:
-        conn.rollback()
-        return _err(f"Loi auto-activate: {e}")
-    finally:
-        conn.close()
+    return _ok({"activated": 0})
 
 
 def fix_booking_integrity():

@@ -198,8 +198,9 @@
       {% endif %}
 
       {% if not booking.is_expired %}
+      {% set refund_fmt = '{:,.0f}'.format(booking.cancel_refund_amt) %}
       <form method="POST" action="{{ url_for('user_cancel_booking', bid=booking.id) }}"
-            onsubmit="return confirm('Phạt {{ booking.cancel_penalty_pct }}%. Hoàn {{ \'{:,.0f}\'.format(booking.cancel_refund_amt) }}đ. Xác nhận huỷ?')">
+            onsubmit="return confirm('Phạt {{ booking.cancel_penalty_pct }}%. Hoàn {{ refund_fmt }}đ. Xác nhận huỷ?')">
         <button class="btn btn-outline">
           🚫 Huỷ (phạt {{ booking.cancel_penalty_pct }}%)
         </button>

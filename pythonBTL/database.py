@@ -305,6 +305,26 @@ TABLES = [
         FOREIGN KEY (slot_id)    REFERENCES parking_slots(id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     """,
+
+    # ── Bảng đơn pin xe điện ─────────────────────────────────────────────────────────────────
+    # mode: 'new_purchase' (mua pin mới) | 'swap' (đổi pin nhanh)
+    # charge_pct: % dung lượng pin nhận được khi đổi (50 | 75 | 100), NULL đối với mua mới
+    """
+    CREATE TABLE IF NOT EXISTS battery_orders (
+        id           INT AUTO_INCREMENT PRIMARY KEY,
+        user_id      INT NOT NULL,
+        vehicle_id   INT NOT NULL,
+        vehicle_type VARCHAR(20) NOT NULL,
+        mode         ENUM('new_purchase','swap') NOT NULL DEFAULT 'new_purchase',
+        final_price  INT NOT NULL,
+        charge_pct   TINYINT DEFAULT NULL,          -- 50 / 75 / 100, NULL khi mua mới
+        status       ENUM('completed','cancelled') NOT NULL DEFAULT 'completed',
+        notes        TEXT,
+        created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id)    REFERENCES users(id),
+        FOREIGN KEY (vehicle_id) REFERENCES vehicles(id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
 ]
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -618,6 +638,42 @@ def init_db():
             )
             conn.commit()
             print("[DB] Migration: parking_orders updated.")
+
+        # Bước 2.8: Migration — tạo/cập nhật bảng battery_orders
+        try:
+            cur.execute("SELECT id FROM battery_orders LIMIT 1")
+            # Bảng đã tồn tại — kiểm tra và thêm cột mới nếu cần
+            try:
+                cur.execute("SELECT charge_pct FROM battery_orders LIMIT 1")
+            except Exception:
+                print("[DB] Migration: Adding 'charge_pct' to battery_orders...")
+                cur.execute(
+                    "ALTER TABLE battery_orders "
+                    "ADD COLUMN charge_pct TINYINT DEFAULT NULL, "
+                    "MODIFY COLUMN mode ENUM('new_purchase','swap') NOT NULL DEFAULT 'new_purchase'"
+                )
+                conn.commit()
+                print("[DB] Migration: battery_orders updated.")
+        except Exception:
+            print("[DB] Migration: Creating 'battery_orders' table...")
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS battery_orders (
+                    id           INT AUTO_INCREMENT PRIMARY KEY,
+                    user_id      INT NOT NULL,
+                    vehicle_id   INT NOT NULL,
+                    vehicle_type VARCHAR(20) NOT NULL,
+                    mode         ENUM('new_purchase','swap') NOT NULL DEFAULT 'new_purchase',
+                    final_price  INT NOT NULL,
+                    charge_pct   TINYINT DEFAULT NULL,
+                    status       ENUM('completed','cancelled') NOT NULL DEFAULT 'completed',
+                    notes        TEXT,
+                    created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id)    REFERENCES users(id),
+                    FOREIGN KEY (vehicle_id) REFERENCES vehicles(id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """)
+            conn.commit()
+            print("[DB] Migration: battery_orders table created.")
 
         # Bước 3: Kiểm tra và seed nếu DB mới trống
         cur.execute("SELECT COUNT(*) as cnt FROM users")

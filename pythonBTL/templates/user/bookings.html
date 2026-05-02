@@ -304,12 +304,26 @@
 
     {% if b.status == 'pending' %}
     <div class="bk-actions">
-      {% if b.is_in_window or b.is_before_scheduled %}
-        {# Nhảy sang trang Gửi xe để xác nhận như bình thường #}
-        <a href="{{ url_for('user_park', vehicle_id=b.vehicle_id, slot_id=b.slot_id) }}" 
-           class="btn btn-primary btn-sm" style="text-decoration:none;display:inline-flex;align-items:center;">
-          {% if b.is_in_window %}✅ Check-in ngay{% else %}🚗 Check-in sớm{% endif %}
-        </a>
+      {% if b.is_before_scheduled %}
+        {# Chưa đến giờ hẹn → có thể check-in sớm (tính phí bình thường) #}
+        <form method="POST" action="{{ url_for('user_checkin_booking', bid=b.id) }}"
+              data-confirm="Check-in sớm: phần đến sớm sẽ tính phí bình thường (chưa tính vào booking). Xác nhận?">
+          <button class="btn btn-outline btn-sm">🚗 Check-in sớm</button>
+        </form>
+        <span style="font-size:12px;color:var(--text-muted);">
+          📋 Phí {{ '{:,.0f}'.format(b.total_fee) }}đ đã thanh toán — có hiệu lực từ {{ b.scheduled_time[:16] }}
+        </span>
+
+      {% elif b.is_in_window %}
+        {# Trong khung giờ → Check-in, phí đã cover #}
+        <form method="POST" action="{{ url_for('user_checkin_booking', bid=b.id) }}"
+              data-confirm="Xác nhận check-in? Phí {{ '{:,.0f}'.format(b.total_fee) }}đ đã thanh toán sẽ cover toàn bộ {{ b.duration_hours|int }}h.">
+          <button class="btn btn-primary btn-sm">✅ Check-in ngay</button>
+        </form>
+        <span style="font-size:12px;color:#10b981;">
+          ✔ {{ '{:,.0f}'.format(b.total_fee) }}đ đã thanh toán — cover đến {{ b.expire_at[:16] }}
+        </span>
+
       {% else %}
         <span style="font-size:13px;color:#ef4444;">❌ Đã hết khung giờ</span>
       {% endif %}
@@ -325,6 +339,7 @@
       {% endif %}
     </div>
     {% endif %}
+
   </div>
   {% endfor %}
   {% endif %}

@@ -1,0 +1,398 @@
+{% extends "base.html" %}
+{% block title %}Dịch vụ Pin xe điện — ParkEV{% endblock %}
+{% block page_title %}🔋 Dịch vụ Pin xe điện{% endblock %}
+{% block page_subtitle %}Mua pin mới hoặc đổi pin nhanh — không cần chờ sạc{% endblock %}
+
+{% block content %}
+<style>
+/* ── Tab bar (same pattern as bookings.html) ── */
+.bat-tab-bar { display:flex; gap:8px; margin-bottom:20px; }
+.bat-tab-btn {
+  padding:9px 22px; border-radius:10px; font-weight:700; font-size:14px; cursor:pointer;
+  border:1px solid var(--border); background:var(--bg-card); color:var(--text-muted);
+  transition:all .2s; display:flex; align-items:center; gap:7px;
+}
+.bat-tab-btn.act-new  { background:var(--primary); color:#fff; border-color:var(--primary); box-shadow:0 4px 14px rgba(99,102,241,.3); }
+.bat-tab-btn.act-swap { background:#10b981;         color:#fff; border-color:#10b981;        box-shadow:0 4px 14px rgba(16,185,129,.3); }
+
+/* ── Contact banner ── */
+.contact-card {
+  background:rgba(245,158,11,.08); border:1px solid rgba(245,158,11,.3);
+  border-radius:12px; padding:16px 20px; margin-bottom:18px;
+  display:flex; gap:14px; align-items:flex-start;
+}
+.contact-icon { font-size:26px; flex-shrink:0; }
+.contact-title { font-size:14px; font-weight:800; color:#f59e0b; margin-bottom:5px; }
+.contact-desc  { font-size:13px; color:var(--text-muted); line-height:1.5; }
+.contact-row   { display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+.contact-chip {
+  display:inline-flex; align-items:center; gap:6px;
+  background:rgba(245,158,11,.12); border:1px solid rgba(245,158,11,.3);
+  border-radius:20px; padding:5px 13px; font-size:12.5px; font-weight:700;
+  color:#d97706; text-decoration:none; transition:background .2s;
+}
+.contact-chip:hover { background:rgba(245,158,11,.22); }
+
+/* ── Info banner ── */
+.info-banner {
+  border-radius:10px; padding:12px 14px; margin-bottom:16px;
+  display:flex; gap:10px; align-items:flex-start; font-size:13px; line-height:1.5;
+}
+.info-banner.purple { background:rgba(99,102,241,.08); border:1px solid rgba(99,102,241,.18); }
+.info-banner.green  { background:rgba(16,185,129,.08);  border:1px solid rgba(16,185,129,.18); }
+.info-icon { font-size:18px; flex-shrink:0; }
+.info-text  { color:var(--text-muted); }
+.info-text strong { color:var(--text); }
+.info-text a { color:var(--primary); font-weight:700; text-decoration:none; }
+
+/* ── Level grid (3 cards for swap %) ── */
+.level-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+@media(max-width:520px){ .level-grid { grid-template-columns:1fr; } }
+.level-card {
+  border:2px solid var(--border); border-radius:12px; padding:16px 12px;
+  cursor:pointer; text-align:center; transition:all .2s; position:relative;
+  background:var(--bg-card2);
+}
+.level-card:hover { border-color:#10b981; transform:translateY(-2px); }
+.level-card.selected { border-color:#10b981; background:rgba(16,185,129,.08); box-shadow:0 4px 16px rgba(16,185,129,.18); }
+.level-card input[type=radio] { display:none; }
+.level-pct {
+  font-size:34px; font-weight:900; line-height:1; margin-bottom:5px;
+  background:linear-gradient(135deg,#10b981,#059669);
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+}
+.level-price { font-size:17px; font-weight:800; color:var(--text); }
+.level-label { font-size:11.5px; color:var(--text-muted); margin-top:4px; }
+.level-ok {
+  position:absolute; top:7px; right:9px;
+  background:#10b981; color:#fff; font-size:10px; font-weight:800;
+  padding:2px 7px; border-radius:6px; display:none;
+}
+.level-card.selected .level-ok { display:block; }
+
+/* ── Price preview ── */
+.price-preview {
+  background:linear-gradient(135deg,rgba(99,102,241,.07),rgba(167,139,250,.04));
+  border:1px solid rgba(99,102,241,.2); border-radius:12px;
+  padding:14px 16px; margin-top:14px;
+}
+.pp-row { display:flex; justify-content:space-between; align-items:center; padding:6px 0; font-size:13.5px; }
+.pp-row+.pp-row { border-top:1px dashed var(--border); }
+.pp-label { color:var(--text-muted); }
+.pp-val   { font-weight:700; }
+.pp-big   { font-size:20px; font-weight:900; color:var(--primary); }
+.pp-green { color:#10b981; }
+.pp-red   { color:#ef4444; }
+
+/* ── Price reference table ── */
+.price-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+@media(max-width:540px){ .price-grid { grid-template-columns:1fr; } }
+.ptable { width:100%; border-collapse:collapse; font-size:13px; }
+.ptable th { text-align:left; padding:8px 10px; font-size:11px; font-weight:700; color:var(--text-muted); border-bottom:1px solid var(--border); text-transform:uppercase; letter-spacing:.4px; }
+.ptable td { padding:10px 10px; border-bottom:1px solid var(--border); }
+.ptable tr:last-child td { border-bottom:none; }
+.ptable tr:hover td { background:rgba(99,102,241,.03); }
+
+/* ── History ── */
+.htable { width:100%; border-collapse:collapse; font-size:13px; }
+.htable th { text-align:left; padding:8px 12px; font-size:11px; font-weight:700; color:var(--text-muted); border-bottom:1px solid var(--border); text-transform:uppercase; letter-spacing:.4px; }
+.htable td { padding:10px 12px; border-bottom:1px solid var(--border); }
+.htable tr:last-child td { border-bottom:none; }
+.htable tr:hover td { background:rgba(99,102,241,.03); }
+.badge { display:inline-block; padding:2px 8px; border-radius:20px; font-size:11px; font-weight:700; }
+.b-new  { background:rgba(99,102,241,.12); color:var(--primary); }
+.b-swap { background:rgba(16,185,129,.12);  color:#10b981; }
+
+.empty-state { text-align:center; padding:36px; color:var(--text-muted); }
+.empty-icon  { font-size:40px; margin-bottom:12px; }
+.wallet-chip {
+  background:rgba(99,102,241,.1); border:1px solid rgba(99,102,241,.2);
+  border-radius:20px; padding:6px 13px; font-size:12.5px; font-weight:600; color:var(--primary);
+}
+.f-label { font-size:12px; font-weight:700; color:var(--text-muted); margin-bottom:5px; display:block; }
+</style>
+
+{# ── Tab bar ── #}
+<div class="bat-tab-bar">
+  <button type="button" class="bat-tab-btn act-new" id="tab-new" onclick="setMode('new_purchase')">
+    🔋 Mua pin mới
+  </button>
+  <button type="button" class="bat-tab-btn" id="tab-swap" onclick="setMode('swap')">
+    🔄 Đổi pin nhanh
+  </button>
+</div>
+
+{# ── Banner liên hệ (chỉ hiện khi tab Mua pin mới) ── #}
+<div class="contact-card" id="contact-banner">
+  <div class="contact-icon">📞</div>
+  <div>
+    <div class="contact-title">Muốn thu pin cũ — đổi pin mới? Liên hệ Admin!</div>
+    <div class="contact-desc">
+      Nếu bạn muốn <strong>bán lại pin cũ</strong> và được khấu trừ vào giá pin mới,
+      vui lòng liên hệ để chúng tôi định giá và hỗ trợ thủ tục.
+    </div>
+    <div class="contact-row">
+      <a class="contact-chip" href="mailto:admin@parkev.vn">✉️ admin@parkev.vn</a>
+      <a class="contact-chip" href="https://zalo.me/0999999999" target="_blank">💬 Zalo: 0999999999</a>
+    </div>
+  </div>
+</div>
+
+{# ── Main form card ── #}
+<div class="card" style="margin-bottom:18px;">
+  <form method="POST" action="{{ url_for('user_battery') }}" id="bat-form">
+    <input type="hidden" name="mode"       id="mode-input"   value="new_purchase">
+    <input type="hidden" name="charge_pct" id="chgpct-input" value="100">
+
+    {# Chọn xe #}
+    <div class="form-group">
+      <label class="form-label">🚗 Chọn xe điện</label>
+      {% if vehicles %}
+      <select class="form-control" name="vehicle_id" id="veh-select" required onchange="updatePreview()">
+        <option value="">— Chọn xe —</option>
+        {% for v in vehicles %}
+        <option value="{{ v.id }}" data-vtype="{{ v.vehicle_type }}">
+          {{ v.plate_number }}{% if v.brand %} — {{ v.brand }} {{ v.model or '' }}{% endif %}
+          ({{ vtype_labels.get(v.vehicle_type, v.vehicle_type) }})
+        </option>
+        {% endfor %}
+      </select>
+      {% else %}
+      <div class="info-banner purple">
+        <span class="info-icon">⚠️</span>
+        <span class="info-text">Bạn chưa có xe điện nào.
+          <a href="{{ url_for('user_vehicles') }}">Thêm xe ngay →</a>
+        </span>
+      </div>
+      {% endif %}
+    </div>
+
+    {# Panel MUA PIN MỚI #}
+    <div id="panel-new">
+      <div class="info-banner purple">
+        <span class="info-icon">🔋</span>
+        <div class="info-text">
+          <strong>Mua pin nguyên hộp — bảo hành 2 năm chính hãng.</strong><br>
+          Giá tự động theo loại xe đã chọn.
+        </div>
+      </div>
+    </div>
+
+    {# Panel ĐỔI PIN NHANH #}
+    <div id="panel-swap" style="display:none;">
+      <div class="info-banner green">
+        <span class="info-icon">🔄</span>
+        <div class="info-text">
+          <strong>Mang pin cạn → nhận pin đã sạc sẵn → đi ngay!</strong><br>
+          Không cần chờ sạc. Chọn mức % dung lượng bạn muốn nhận:
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="f-label">⚡ Mức pin nhận về</label>
+        <div class="level-grid">
+          {% for pct, price in swap_prices.items() %}
+          <label class="level-card {% if pct == 100 %}selected{% endif %}"
+                 id="lvl-{{ pct }}" onclick="selectLevel({{ pct }})">
+            <input type="radio" name="_level" value="{{ pct }}" {% if pct==100 %}checked{% endif %}>
+            <span class="level-ok">✓ OK</span>
+            <div class="level-pct">{{ pct }}%</div>
+            <div class="level-price">{{ '{:,.0f}'.format(price) }}đ</div>
+            <div class="level-label">{{ swap_labels.get(pct, '') }}</div>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    {# Preview giá #}
+    <div class="price-preview" id="price-preview" style="display:none;">
+      <div class="pp-row">
+        <span class="pp-label">Dịch vụ</span>
+        <span class="pp-val" id="pp-service-name">—</span>
+      </div>
+      <div class="pp-row">
+        <span class="pp-label">💰 Phí dịch vụ</span>
+        <span class="pp-big" id="pp-price">—</span>
+      </div>
+      <div class="pp-row">
+        <span class="pp-label">Số dư ví hiện tại</span>
+        <span class="pp-val">{{ '{:,.0f}'.format(balance) }}đ</span>
+      </div>
+      <div class="pp-row">
+        <span class="pp-label">Số dư sau thanh toán</span>
+        <span class="pp-val" id="pp-after">—</span>
+      </div>
+      <div id="pp-warn" style="display:none;margin-top:8px;padding:7px 11px;background:rgba(239,68,68,.1);border-radius:8px;font-size:12.5px;color:#ef4444;font-weight:600;">
+        ⚠️ Số dư ví không đủ. Vui lòng <a href="{{ url_for('user_wallet') }}" style="color:#ef4444;">nạp thêm tiền</a>.
+      </div>
+    </div>
+
+    {# Ghi chú #}
+    <div class="form-group" style="margin-top:14px;">
+      <label class="form-label">📝 Ghi chú (tuỳ chọn)</label>
+      <textarea class="form-control" name="notes" rows="2"
+                placeholder="Ví dụ: Xe VinFast VF8, pin đã dùng 2 năm..."></textarea>
+    </div>
+
+    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+      <button type="submit" class="btn btn-primary" id="submit-btn" disabled
+              data-confirm-btn="Xác nhận thanh toán qua ví?">
+        🔋 Xác nhận
+      </button>
+      <span class="wallet-chip">💰 {{ '{:,.0f}'.format(balance) }}đ</span>
+    </div>
+  </form>
+</div>
+
+{# ── Bảng giá tham khảo ── #}
+<div class="card" style="margin-bottom:18px;">
+  <h3 style="margin:0 0 16px;font-size:15px;">📊 Bảng giá tham khảo</h3>
+  <div class="price-grid">
+    <div>
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">🔋 Mua pin mới</div>
+      <table class="ptable">
+        <thead><tr><th>Loại xe</th><th>Giá pin</th></tr></thead>
+        <tbody>
+          {% for vtype, price in battery_prices.items() %}
+          <tr>
+            <td>{{ vtype_labels.get(vtype, vtype) }}</td>
+            <td style="font-weight:800;color:var(--primary);">{{ '{:,.0f}'.format(price) }}đ</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">🔄 Đổi pin nhanh</div>
+      <table class="ptable">
+        <thead><tr><th>Mức pin nhận</th><th>Phí</th></tr></thead>
+        <tbody>
+          {% for pct, price in swap_prices.items() %}
+          <tr>
+            <td><strong>{{ pct }}%</strong> <small style="color:var(--text-muted);">dung lượng</small></td>
+            <td style="font-weight:800;color:#10b981;">{{ '{:,.0f}'.format(price) }}đ</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{# ── Lịch sử giao dịch pin ── #}
+<div>
+  <h3 style="margin:0 0 14px;font-size:15px;">📜 Lịch sử giao dịch pin</h3>
+  {% if orders %}
+  <div class="card" style="padding:0;overflow:auto;">
+    <table class="htable">
+      <thead>
+        <tr>
+          <th>#</th><th>Xe</th><th>Dịch vụ</th><th>Chi tiết</th><th>Thanh toán</th><th>Thời gian</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for o in orders %}
+        <tr>
+          <td style="color:var(--text-muted);">#{{ o.id }}</td>
+          <td>
+            <strong>{{ o.plate_number }}</strong>
+            {% if o.brand %}<br><small style="color:var(--text-muted);">{{ o.brand }} {{ o.model or '' }}</small>{% endif %}
+          </td>
+          <td>
+            {% if o.mode == 'swap' %}<span class="badge b-swap">🔄 Đổi pin</span>
+            {% else %}<span class="badge b-new">🔋 Mua mới</span>{% endif %}
+          </td>
+          <td>
+            {% if o.mode == 'swap' and o.charge_pct %}Pin {{ o.charge_pct }}% dung lượng
+            {% else %}Pin nguyên hộp{% endif %}
+          </td>
+          <td style="font-weight:700;color:var(--primary);">{{ '{:,.0f}'.format(o.final_price) }}đ</td>
+          <td style="color:var(--text-muted);font-size:12px;">{{ o.created_at[:16] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-icon">🔋</div>
+    <p>Chưa có giao dịch pin nào.</p>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const BAT_PRICES  = {{ battery_prices | tojson }};
+const SWAP_PRICES = {{ swap_prices    | tojson }};
+const BALANCE     = {{ balance }};
+let currentMode  = 'new_purchase';
+let currentLevel = 100;
+
+function setMode(mode) {
+  currentMode = mode;
+  document.getElementById('mode-input').value = mode;
+  document.getElementById('tab-new').className  = 'bat-tab-btn' + (mode==='new_purchase' ? ' act-new'  : '');
+  document.getElementById('tab-swap').className = 'bat-tab-btn' + (mode==='swap'         ? ' act-swap' : '');
+  document.getElementById('panel-new').style.display   = mode==='new_purchase' ? 'block' : 'none';
+  document.getElementById('panel-swap').style.display  = mode==='swap'         ? 'block' : 'none';
+  document.getElementById('contact-banner').style.display = mode==='new_purchase' ? 'flex' : 'none';
+  document.getElementById('chgpct-input').value = mode==='new_purchase' ? 100 : currentLevel;
+  updatePreview();
+}
+
+function selectLevel(pct) {
+  currentLevel = pct;
+  document.getElementById('chgpct-input').value = pct;
+  document.querySelectorAll('.level-card').forEach(c => c.classList.remove('selected'));
+  document.getElementById('lvl-' + pct).classList.add('selected');
+  updatePreview();
+}
+
+function updatePreview() {
+  const sel   = document.getElementById('veh-select');
+  if (!sel) return;
+  const opt   = sel.options[sel.selectedIndex];
+  const vtype = opt ? opt.dataset.vtype : '';
+  const box   = document.getElementById('price-preview');
+  const btn   = document.getElementById('submit-btn');
+  if (!vtype) { box.style.display='none'; btn.disabled=true; return; }
+
+  let price = 0, name = '';
+  if (currentMode === 'new_purchase') {
+    price = BAT_PRICES[vtype]; name = 'Mua pin mới';
+    if (!price) { box.style.display='none'; btn.disabled=true; return; }
+  } else {
+    price = SWAP_PRICES[currentLevel]; name = `Đổi pin nhanh ${currentLevel}%`;
+  }
+
+  box.style.display = 'block';
+  document.getElementById('pp-service-name').textContent = name;
+  document.getElementById('pp-price').textContent = fmt(price) + 'đ';
+
+  const after   = BALANCE - price;
+  const afterEl = document.getElementById('pp-after');
+  const warn    = document.getElementById('pp-warn');
+  if (after < 0) {
+    afterEl.textContent = '⚠ Không đủ'; afterEl.className = 'pp-val pp-red';
+    warn.style.display = 'block'; btn.disabled = true;
+  } else {
+    afterEl.textContent = fmt(after) + 'đ';
+    afterEl.className = 'pp-val' + (after < 50000 ? ' pp-red' : ' pp-green');
+    warn.style.display = 'none'; btn.disabled = false;
+  }
+  btn.textContent = currentMode==='swap'
+    ? `🔄 Đổi pin ${currentLevel}% — ${fmt(price)}đ`
+    : `🔋 Mua pin mới — ${fmt(price)}đ`;
+  btn.disabled = after < 0;
+}
+
+function fmt(n) { return (n||0).toLocaleString('vi-VN'); }
+
+setMode('new_purchase');
+const vs = document.getElementById('veh-select');
+if (vs) vs.addEventListener('change', updatePreview);
+</script>
+{% endblock %}
